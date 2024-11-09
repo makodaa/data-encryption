@@ -1,3 +1,9 @@
+/**
+ * This is an implementation of the Data Encryption Standard (DES) algorithm.
+ * The DES algorithm is a symmetric-key algorithm for the encryption of digital data.
+ * The reference used for this implementation is accessible in this document:
+ *   https://csrc.nist.gov/files/pubs/fips/46-3/final/docs/fips46-3.pdf
+ */
 
 /**
  * Encrypts the input string using the DES algorithm.
