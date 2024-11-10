@@ -1,3 +1,22 @@
+/**
+ * IDEA (International Data Encryption Algorithm) is a symmetric key block cipher
+ *   that operates on 64-bit blocks of data using a 128-bit key.
+ * It consists of 8.5 rounds of encryption and decryption.
+ * 
+ * The IDEA algorithm is based on the following operations:
+ *   - Addition modulo 2^16
+ *   - Multiplication modulo 2^16 + 1
+ *   - Bitwise XOR
+ * 
+ * The references used for this implementation are accessible in the documents:
+ *   Hoffman, N. (2007). Cryptologia, 31(2), 143–151. doi:10.1080/01611190701215640
+ * 
+ *   Shehata, K., Hamdy, N., Elagooz, S., & Helmy, M. (2003). DESIGN AND IMPLEMENTATION OF IDEA ALGORITHM KEY SCHEDULE ON FPGA. Retrieved from https://asat.journals.ekb.eg/article_24692.html
+ * 
+ *   Lai, X., Massey, J.L. (1991). A Proposal for a New Block Encryption Standard. In: Damgård, I.B. (eds) Advances in Cryptology — EUROCRYPT ’90. EUROCRYPT 1990. Lecture Notes in Computer Science, vol 473. Springer, Berlin, Heidelberg. https://doi.org/10.1007/3-540-46877-3_35
+ */
+
+
 const BIT_128 = (1n << 128n) - 1n;
 
 /**
