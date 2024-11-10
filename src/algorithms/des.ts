@@ -14,13 +14,13 @@
 export const encrypt: EncryptDecrypt = (text, key) => {
   const resolvedKey = key == null ? random64BitKey().toString() : key;
   const hashedKey = hash(resolvedKey);
-  const keySchedule: bigint[] = createKeySchedule(hashedKey);
+  const keySchedule = createKeySchedule(hashedKey);
 
   const blocks = splitInto64BitBlocks(text);
   const outputs = blocks.map((b) => encryptBlock(b, keySchedule));
 
   const partialOutputMatrix: string[][] = [];
-  const encrypted: bigint[] = [];
+  const encryptedBlocks: bigint[] = [];
 
   /// Extract the partial outputs and the encrypted blocks.
   for (const [partialOutput, encryptedBlock] of outputs) {
@@ -36,10 +36,10 @@ export const encrypt: EncryptDecrypt = (text, key) => {
       partialOutputMatrix[i].push(`0x${lStr} 0x${rStr}`);
     }
 
-    encrypted.push(encryptedBlock);
+    encryptedBlocks.push(encryptedBlock);
   }
 
-  const encryptedText = extractStringFrom64BitBlocks(encrypted);
+  const encryptedText = extractStringFrom64BitBlocks(encryptedBlocks);
   const partialOutputs: string[] = [];
   for (const row of partialOutputMatrix) {
     partialOutputs.push(row.join(",\t"));
@@ -58,13 +58,13 @@ export const encrypt: EncryptDecrypt = (text, key) => {
 export const decrypt: EncryptDecrypt = (text, key) => {
   const resolvedKey = key == null ? random64BitKey().toString() : key;
   const hashedKey = hash(resolvedKey);
-  const keySchedule: bigint[] = createKeySchedule(hashedKey);
+  const keySchedule = createKeySchedule(hashedKey);
 
   const bits = splitInto64BitBlocks(text);
   const outputs = bits.map((b) => decryptBlock(b, keySchedule));
 
   const partialOutputMatrix: string[][] = [];
-  const decrypted: bigint[] = [];
+  const decryptedBlocks: bigint[] = [];
   for (const [partialOutput, decryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
       if (partialOutputMatrix[i] == null) {
@@ -78,10 +78,10 @@ export const decrypt: EncryptDecrypt = (text, key) => {
       partialOutputMatrix[i].push(`0x${lStr} 0x${rStr}`);
     }
 
-    decrypted.push(decryptedBlock);
+    decryptedBlocks.push(decryptedBlock);
   }
 
-  const decryptedText = extractStringFrom64BitBlocks(decrypted);
+  const decryptedText = extractStringFrom64BitBlocks(decryptedBlocks);
   const partialOutputs: string[] = [];
   for (const row of partialOutputMatrix) {
     partialOutputs.push(row.join(",\t"));
@@ -209,7 +209,7 @@ const cyclicLeftShift = (block: bigint, blockSize: bigint, shiftAmount: bigint) 
   ((1n << BigInt(blockSize)) - 1n);
 
 
-type EncryptBlock = (block: bigint, keySchedule: bigint[]) => [[bigint, bigint][], bigint];
+type EncryptDecryptBlock = (block: bigint, keySchedule: bigint[]) => [[bigint, bigint][], bigint];
 
 /**
  * Encrypts a block of data using the DES algorithm.
@@ -217,7 +217,7 @@ type EncryptBlock = (block: bigint, keySchedule: bigint[]) => [[bigint, bigint][
  * @param keySchedule The key schedule generated.
  * @returns The encrypted block of data.
  */
-const encryptBlock: EncryptBlock = (block, keySchedule) => {
+const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   const partialOutputs: [bigint, bigint][] = [];
   let [l, r] = permuteSplit(block, BUILTIN.IP);
 
@@ -231,15 +231,13 @@ const encryptBlock: EncryptBlock = (block, keySchedule) => {
   return [partialOutputs, permuteJoin(l, r, BUILTIN.IPInverse)];
 };
 
-type DecryptBlock = (block: bigint, keySchedule: bigint[]) => [[bigint, bigint][], bigint];
-
 /**
  * Decrypts a block of data using the DES algorithm.
  * @param block A block of 64-bit data.
  * @param keySchedule The key schedule generated.
  * @returns The decrypted block of data.
  */
-const decryptBlock: DecryptBlock = (block, keySchedule) => {
+const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   const partialOutputs: [bigint, bigint][] = [];
   let [l, r] = permuteSplit(block, BUILTIN.IP);
 
