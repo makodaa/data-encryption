@@ -25,45 +25,30 @@ const BIT_128 = (1n << 128n) - 1n;
  * @param key a string key
  * @returns the encrypted text
  */
-export const encrypt: EncryptDecrypt = (text, key) => {
+export const encrypt: EncryptDecrypt = (messageHex, key) => {
   /// Key resolution
-  const resolvedKey = key == null ? random64BitKey().toString() : key;
+  const resolvedKey = key || random128BitKey().toString();
   const hashedKey = hash(resolvedKey) & BIT_128;
 
   /// Generation of key schedule
   const keySchedule = createKeySchedule(hashedKey, { inverse: false });
 
-  const blocks = splitInto64BitBlocks(text);
+  const blocks = extract64BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((b) => encryptBlock(b, keySchedule));
 
-  const partialOutputMatrix: string[][] = [];
+  const partialOutputs: [bigint, bigint, bigint, bigint][][] = [];
   const encryptedBlocks: bigint[] = [];
 
   /// Extract the partial outputs and the encrypted blocks.
   for (const [partialOutput, encryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      if (partialOutputMatrix[i] == null) {
-        partialOutputMatrix[i] = [];
-      }
-
-      const [x1, x2, x3, x4] = partialOutput[i];
-      const x1Str = x1.toString(16).padStart(8, "0").toUpperCase();
-      const x2Str = x2.toString(16).padStart(8, "0").toUpperCase();
-      const x3Str = x3.toString(16).padStart(8, "0").toUpperCase();
-      const x4Str = x4.toString(16).padStart(8, "0").toUpperCase();
-
-      partialOutputMatrix[i].push(`0x${x1Str} 0x${x2Str} 0x${x3Str} 0x${x4Str}`);
+      partialOutputs[i] ??= [];
+      partialOutputs[i].push(partialOutput[i]);
     }
-
     encryptedBlocks.push(encryptedBlock);
   }
 
-  const encryptedText = extractStringFrom64BitBlocks(encryptedBlocks);
-  const partialOutputs: string[] = [];
-  for (const row of partialOutputMatrix) {
-    partialOutputs.push(row.join(",\t"));
-  }
-
+  const encryptedText = extractBLOBFrom64BitBytes(encryptedBlocks);
   return [partialOutputs, encryptedText, resolvedKey];
 };
 
@@ -73,47 +58,32 @@ export const encrypt: EncryptDecrypt = (text, key) => {
  * @param key a string key
  * @returns the decrypted text
  */
-export const decrypt: EncryptDecrypt = (text, key) => {
-  const resolvedKey = key == null ? random64BitKey().toString() : key;
+export const decrypt: EncryptDecrypt = (messageHex, key) => {
+  const resolvedKey = key || random128BitKey().toString();
   const hashedKey = hash(resolvedKey) & BIT_128;
   const keySchedule = createKeySchedule(hashedKey, { inverse: true });
 
-  const blocks = splitInto64BitBlocks(text);
+  const blocks = extract64BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((b) => decryptBlock(b, keySchedule));
-  const partialOutputMatrix: string[][] = [];
+  const partialOutputs: [bigint, bigint, bigint, bigint][][] = [];
   const decryptedBlocks: bigint[] = [];
 
   /// Extract the partial outputs and the encrypted blocks.
   for (const [partialOutput, decryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      if (partialOutputMatrix[i] == null) {
-        partialOutputMatrix[i] = [];
-      }
-
-      const [x1, x2, x3, x4] = partialOutput[i];
-      const x1Str = x1.toString(16).padStart(8, "0").toUpperCase();
-      const x2Str = x2.toString(16).padStart(8, "0").toUpperCase();
-      const x3Str = x3.toString(16).padStart(8, "0").toUpperCase();
-      const x4Str = x4.toString(16).padStart(8, "0").toUpperCase();
-
-      partialOutputMatrix[i].push(`0x${x1Str} 0x${x2Str} 0x${x3Str} 0x${x4Str}`);
+      partialOutputs[i] ??= [];
+      partialOutputs[i].push(partialOutput[i]);
     }
-
     decryptedBlocks.push(decryptedBlock);
   }
 
-  const decryptedText = extractStringFrom64BitBlocks(decryptedBlocks);
-  const partialOutputs: string[] = [];
-  for (const row of partialOutputMatrix) {
-    partialOutputs.push(row.join(",\t"));
-  }
-
+  const decryptedText = extractBLOBFrom64BitBytes(decryptedBlocks);
 
   return [partialOutputs, decryptedText, resolvedKey];
 };
 
-type EncryptDecrypt = (text: string, key?: string) =>//
-  [partialOutputs: string[], finalOutput: string, key: string];
+type EncryptDecrypt = (messageHex: bigint, key?: string) => //
+  [partialOutputs: [bigint, bigint, bigint, bigint][][], finalOutput: bigint, key: string];
 
 /**
  * Cyclically shifts a block to the left by the specified amount.
@@ -254,8 +224,9 @@ const multiplicativeInverse = (value: bigint): bigint => {
     [r, newR] = [newR, r - quotient * newR];
   }
 
+  console.log({ value });
   if (r > 1n) {
-    throw new Error("Value is not invertible.");
+    throw new Error(`Value is not invertible. ${value}`);
   }
 
   return t < 0n ? t + 0x10001n : t;
@@ -399,40 +370,25 @@ const extractBitsIntoBlocks = (block: bigint, blockSize: bigint, blockCount?: bi
   return blocks;
 };
 
-/**
- * Takes a string and partitions it into 64-bit blocks of data.
- * @param text input string
- * @returns a sequence of 64-bit blocks of data.
- */
-const splitInto64BitBlocks = (text: string): bigint[] => {
-  let bits = 0n;
-  for (let i = 0; i < text.length; i++) {
-    bits <<= 8n;
-    bits += BigInt(text.charCodeAt(i));
+const extract64BitBytesFromBLOB = (hex: bigint): bigint[] => {
+  const blocks: bigint[] = [];
+  while (hex > 0) {
+    blocks.unshift(hex & ((1n << 64n) - 1n));
+    hex >>= 64n;
   }
 
-  return extractBitsIntoBlocks(bits, 64n);
+  return blocks;
 };
 
-/**
- * This function concatenates the 64-bit blocks of data into a string.
- * @param blocks a sequence of 64-bit blocks of data.
- * @returns output string.
- */
-const extractStringFrom64BitBlocks = (blocks: bigint[]): string => {
-  let text = "";
+const extractBLOBFrom64BitBytes = (blocks: bigint[]): bigint => {
+  let hex = 0n;
 
   for (const block of blocks) {
-    let extracted = "";
-    let bits = block;
-    while (bits > 0) {
-      extracted = String.fromCharCode(Number(bits & 0xffn)) + extracted;
-      bits >>= 8n;
-    }
-    text += extracted;
+    hex <<= 64n;
+    hex |= block;
   }
 
-  return text;
+  return hex;
 };
 
 /**
@@ -453,9 +409,9 @@ const hash = (string: string): bigint => {
 };
 
 /**
- * Generates a random 64-bit key.
- * @returns a random 64-bit key.
+ * Generates a random 128-bit key.
+ * @returns a random 128-bit key.
  */
-const random64BitKey = (): number => {
-  return Math.floor(Math.random() * 2 ** 61);
+const random128BitKey = (): bigint => {
+  return hash(Math.floor((Math.random() + (10 ** 16)) * 10).toString()) & ((1n << 128n) - 1n);
 };

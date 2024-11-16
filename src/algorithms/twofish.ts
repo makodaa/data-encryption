@@ -1,29 +1,53 @@
-const hex = (n: bigint | number) => typeof n === "bigint" ? n.toString(16) : (n >>> 0).toString(16);
 
-export const encrypt: EncryptDecrypt = (text, key) => {
+
+export const encrypt: EncryptDecrypt = (messageHex, key) => {
+  const encryptedBlocks: bigint[] = [];
+  const partialOutputs: [bigint, bigint, bigint, bigint][][] = [];
+
   /// Key resolution
-  const resolvedKey = key == null ? random64BitKey().toString() : key;
+  const resolvedKey = key || random128BitKey().toString();
   const hashedKey = hash(resolvedKey) & ((1n << 128n) - 1n);
 
   const keySchedule = generateKeySchedule(hashedKey);
-  const blocks = splitStringInto128BitBlocks(text);
-  const encryptedBytes = blocks.map((block) => encryptBlock(block, keySchedule));
-  const string = extractStringFrom128BitBytes(encryptedBytes.map(s => s[1]));
+  const blocks = extract128BitBytesFromBLOB(messageHex);
+  const outputs = blocks.map((block) => encryptBlock(block, keySchedule));
+  /// Extract the partial outputs and the encrypted blocks.
+  for (const [partialOutput, encryptedBlock] of outputs) {
+    for (let i = 0; i < partialOutput.length; i++) {
+      partialOutputs[i] ??= [];
+      partialOutputs[i].push(partialOutput[i]);
+    }
+    encryptedBlocks.push(encryptedBlock);
+  }
 
-  return [[], string, resolvedKey];
+  const output = extractBLOBFrom128BitBytes(encryptedBlocks);
+
+  return [partialOutputs, output, resolvedKey];
 };
 
-export const decrypt: EncryptDecrypt = (text, key) => {
+export const decrypt: EncryptDecrypt = (messageHex, key) => {
+  const encryptedBlocks: bigint[] = [];
+  const partialOutputs: [bigint, bigint, bigint, bigint][][] = [];
+
   /// Key resolution
-  const resolvedKey = key == null ? random64BitKey().toString() : key;
+  const resolvedKey = key || random128BitKey().toString();
   const hashedKey = hash(resolvedKey) & ((1n << 128n) - 1n);
 
   const keySchedule = generateKeySchedule(hashedKey);
-  const blocks = splitStringInto128BitBlocks(text);
-  const decryptedBytes = blocks.map((block) => decryptBlock(block, keySchedule));
-  const string = extractStringFrom128BitBytes(decryptedBytes.map(s => s[1]));
+  const blocks = extract128BitBytesFromBLOB(messageHex);
+  const outputs = blocks.map((block) => decryptBlock(block, keySchedule));
+  /// Extract the partial outputs and the encrypted blocks.
+  for (const [partialOutput, decryptedBlock] of outputs) {
+    for (let i = 0; i < partialOutput.length; i++) {
+      partialOutputs[i] ??= [];
+      partialOutputs[i].push(partialOutput[i]);
+    }
+    encryptedBlocks.push(decryptedBlock);
+  }
 
-  return [[], string, resolvedKey];
+  const output = extractBLOBFrom128BitBytes(encryptedBlocks);
+
+  return [partialOutputs, output, resolvedKey];
 };
 
 const k = 2; // 128 / 64
@@ -64,16 +88,29 @@ const PERMUTATION = {
   },
 };
 
+/**
+ * These are the two irreducible polynomials mentioned
+ *   in the TwoFish paper.
+ */
 type IrreduciblePolynomial = 0b101101001n | 0b101001101n;
 
-type int32 = bigint;
+/**
+ * The key schedule produces two outputs: the subkeys and the S-boxes.
+ */
 type KeySchedule = [K: bigint[], S: bigint[]];
-type EncryptDecrypt = (
-  text: string,
-  key?: string
-) => //
-  [partialOutputs: string[], finalOutput: string, key: string];
+type EncryptDecrypt = (messageHex: bigint, key?: string) => //
+  [partialOutputs: [bigint, bigint, bigint, bigint][][], finalOutput: bigint, key: string];
 
+/**
+ * This function generates the subkeys and S-boxes for the TwoFish algorithm.
+ *   Three vectors are used in creating the subkeys:
+ *      - M[e]: The even DWORD
+ *      - M[o]: The odd DWORD
+ *      - S: The S-boxes.
+ * 
+ * @param key The main key to generate the key schedule from
+ * @returns the computed key schedule
+ */
 const generateKeySchedule = (key: bigint): KeySchedule => {
   /// The key consists of 8k bytes from m[0] to m[8*k - 1].
   ///   The bytes are converted into 2k words of 32 bits each.
@@ -97,18 +134,12 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
     mOdd.push(M[i + 1]);
   }
 
-  const s = new Array(k).fill(0).map(_ => new Array(4).fill(0n));
+  const S = new Array<bigint>(k).fill(0n);
   const vectors = groupData(m, 8);
   for (let i = 0; i < k; ++i) {
-    s[i] = rs(vectors[i]);
-  }
+    const si = rs(vectors[i]);
 
-  const S = new Array<bigint>(k).fill(0n);
-  for (let i = 0; i <= k - 1; ++i) {
-    S[i] = 0n;
-    for (let j = 0; j <= 3; ++j) {
-      S[i] += s[i][j] * (2n ** BigInt(8 * j));
-    }
+    S[i] = si[0] | (si[1] << 8n) | (si[2] << 16n) | (si[3] << 24n);
   }
   S.reverse();
 
@@ -131,7 +162,7 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
 type EncryptDecryptBlock = (
   block: bigint,
   keySchedule: KeySchedule,
-) => [[bigint, bigint][], bigint];
+) => [[bigint, bigint, bigint, bigint][], bigint];
 
 /**
  * Encrypts a block of data using the TwoFish algorithm.
@@ -140,14 +171,13 @@ type EncryptDecryptBlock = (
  * @returns The encrypted block of 128-bit data.
  */
 const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  let data = block;
-  const bytes: bigint[] = [];
-  while (bytes.length < 16) {
-    bytes.unshift(data & 0xFFn);
-    data >>= 8n;
-  }
+  const partialOutputs: [bigint, bigint, bigint, bigint][] = [];
+
+  const bytes = extractBytesFromBlob(block, 16n);
   const P = littleEndianConversion(bytes);
   let [r0, r1, r2, r3] = inputWhiten(P, keySchedule);
+
+  partialOutputs.push([r0, r1, r2, r3]);
 
   /// In each of the 16 rounds, the first two words are used as the input to the function F,
   ///   which also takes the round number as input. The third word is XOR'd with the first output
@@ -155,9 +185,13 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   for (let r = 0; r < 16; ++r) {
     const [f0, f1] = F(r0, r1, r, keySchedule);
     [r0, r1, r2, r3] = [ROR(r2 ^ f0, 1n), ROL(r3, 1n) ^ f1, r0, r1];
+
+    partialOutputs.push([r0, r1, r2, r3]);
   }
 
   [r0, r1, r2, r3] = outputWhiten([r2, r3, r0, r1], keySchedule);
+  partialOutputs.push([r0, r1, r2, r3]);
+
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
   let output = 0n;
@@ -165,7 +199,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     output |= outputBytes[15 - i] << BigInt(8 * i);
   }
 
-  return [[], output];
+  return [partialOutputs, output];
 };
 
 /**
@@ -175,24 +209,26 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
  * @returns The decrypted block of 128-bit data.
  */
 const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  let data = block;
-  const bytes: bigint[] = [];
-  while (bytes.length < 16) {
-    bytes.unshift(data & 0xFFn);
-    data >>= 8n;
-  }
+  const partialOutputs: [bigint, bigint, bigint, bigint][] = [];
+
+  const bytes = extractBytesFromBlob(block, 16n);
   const P = littleEndianConversion(bytes);
   let [r0, r1, r2, r3] = outputWhiten(P, keySchedule);
 
+  partialOutputs.push([r0, r1, r2, r3]);
   /// In each of the 16 rounds, the first two words are used as the input to the function F,
   ///   which also takes the round number as input. The third word is XOR'd with the first output
   ///   of F, and then rotated by left.
   for (let r = 15; r >= 0; --r) {
     const [f0, f1] = F(r0, r1, r, keySchedule);
     [r0, r1, r2, r3] = [ROL(r2, 1n) ^ f0, ROR(r3 ^ f1, 1n), r0, r1];
+
+    partialOutputs.push([r0, r1, r2, r3]);
   }
 
   [r0, r1, r2, r3] = inputWhiten([r2, r3, r0, r1], keySchedule);
+  partialOutputs.push([r0, r1, r2, r3]);
+
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
   let output = 0n;
@@ -200,12 +236,29 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     output |= outputBytes[15 - i] << BigInt(8 * i);
   }
 
-  return [[], output];
+  return [partialOutputs, output];
 };
 
 /**
- * 
- * @param p bytes of information to be converted into 
+ * Extracts bytes from a blob of data.
+ * @param blob the blob to extract bytes from
+ * @param count (optional) the number of bytes to extract
+ * @returns an array of bytes extracted from the blob
+ */
+const extractBytesFromBlob = (blob: bigint, count?: bigint): bigint[] => {
+  const bytes: bigint[] = [];
+  while (blob > 0 || (count != null && bytes.length < count)) {
+    bytes.unshift(blob & 0xFFn);
+    blob >>= 8n;
+  }
+
+  return bytes;
+}
+
+/**
+ * Converts a 128-bit block into 32-bit blocks.
+ * @param p bytes of information to be converted into 32-bit blocks
+ * @returns the 32-bit blocks of the 128-bit block
  */
 const littleEndianConversion = (p: bigint[]): bigint[] => {
   const P = new Array(4)//
@@ -218,6 +271,11 @@ const littleEndianConversion = (p: bigint[]): bigint[] => {
   return P;
 };
 
+/**
+ * Converts a sequence of 32-bit blocks into contiguous bytes.
+ * @param C blocks of 32-bit data
+ * @returns the contiguous bytes of the 128-bit block
+ */
 const inverseLittleEndianConversion = (C: bigint[]): bigint[] => {
   const c = new Array(16)//
     .fill(0)
@@ -255,6 +313,14 @@ const multiplyGF2_8 = (
   return product;
 };
 
+/**
+ * Multiplies the matrix by the vector under GF(2^8) defined
+ *   as GF(2)[x]/f(x) where f(x) = irreducible polynomial.
+ * @param matrix the matrix to multiply the vector with 
+ * @param vector the vector to be multiplied by
+ * @param polynomial the irreducible polynomial to use for GF(2^8) multiplication
+ * @returns the product of the matrix and the vector
+ */
 const multiplyMatrixToVector = (
   matrix: bigint[][],
   vector: bigint[],
@@ -275,6 +341,12 @@ const multiplyMatrixToVector = (
   return output;
 };
 
+/**
+ * Whitens the block data according to the key schedule.
+ * @param blocks the blocks of data to be output-whitened
+ * @param param1 the computed key schedule
+ * @returns the whitened blocks of data
+ */
 const inputWhiten = (blocks: bigint[], [K, S]: KeySchedule): bigint[] => {
   const outputBlocks: bigint[] = [...blocks];
   for (let i = 0; i < 4; ++i) {
@@ -284,6 +356,12 @@ const inputWhiten = (blocks: bigint[], [K, S]: KeySchedule): bigint[] => {
   return blocks;
 };
 
+/**
+ * Whitens the block data according to the key schedule.
+ * @param blocks the blocks of data to be output-whitened
+ * @param param1 the computed key schedule
+ * @returns the whitened blocks of data
+ */
 const outputWhiten = (blocks: bigint[], [K, S]: KeySchedule): bigint[] => {
   const outputBlocks: bigint[] = [...blocks];
   for (let i = 0; i < 4; ++i) {
@@ -293,15 +371,35 @@ const outputWhiten = (blocks: bigint[], [K, S]: KeySchedule): bigint[] => {
   return blocks;
 };
 
-const rs = (block: bigint[]): bigint[] => multiplyMatrixToVector(MATRIX.rs, block, 0b101001101n);
-const mds = (block: bigint[]): bigint[] => multiplyMatrixToVector(MATRIX.mds, block, 0b101101001n);
+/**
+ * Multiplies the given vector by the Reed-Solomon matrix under GF(2^8)
+ *   defined as GF(2)[x]/f(x) where f(x) = x^8 + x^6 + x^3 + x^2 + 1.
+ * The vector must be of length 8.
+ * @param vector the vector to multiply by the Reed-Solomon matrix
+ * @returns the result of multiplying the block by the Reed-Solomon matrix
+ */
+const rs = (vector: bigint[]): bigint[] =>
+  multiplyMatrixToVector(MATRIX.rs, vector, 0b101001101n);
 
-const F = (
-  r0: int32,
-  r1: int32,
-  round: number,
-  [K, S]: KeySchedule,
-): [int32, int32] => {
+/**
+ * Multiplies the given vector by the MDS matrix under GF(2^8)
+ *   defined as GF(2)[x]/f(x) where f(x) = x^8 + x^6 + x^5 + x^3 + 1.
+ * The vector must be of length 4.
+ * @param vector the vector to multiply by the MDS matrix
+ * @returns the result of multiplying the block by the MDS matrix
+ */
+const mds = (vector: bigint[]): bigint[] =>
+  multiplyMatrixToVector(MATRIX.mds, vector, 0b101101001n);
+
+/**
+ * Key dependent permutation of 64-bit values.
+ * @param r0 the first dword
+ * @param r1 the second dword
+ * @param round the round number
+ * @param param3 the key schedule
+ * @returns two values, f0 and f1 according to the TwoFish algorithm
+ */
+const F = (r0: bigint, r1: bigint, round: number, [K, S]: KeySchedule): [bigint, bigint] => {
   const t0 = H(r0, S);
   const t1 = H(ROL(r1, 8n), S);
 
@@ -313,12 +411,13 @@ const F = (
 
 
 /**
- * 
+ * The H function is a 32-bit block cipher that takes a 32-bit block of data
+ *  and a 128-bit key schedule and produces a 32-bit block of data.
  * @param X The block of data.
  * @param L The different values of the key schedule.
- * @returns 
+ * @returns The result of the H function.
  */
-const H = (X: int32, L: int32[]): int32 => {
+const H = (X: bigint, L: bigint[]): bigint => {
   assert(0n <= X && X <= 2n ** 32n - 1n, "Word must be a 32-bit number");
   L.every((s) => assert(0n <= s && s <= 2n ** 32n - 1n, "Word must be a 32-bit number"));
   assert(L.length == k, "The amount of values in [l] must be equal to [k]");
@@ -346,7 +445,13 @@ const H = (X: int32, L: int32[]): int32 => {
   return z0 | (z1 << 8n) | (z2 << 16n) | (z3 << 24n);
 };
 
-
+/**
+ * Substitutes a block of data according to the given tables.
+ *   There must be four tables, each with 16 elements.
+ * @param block the block of data to substitute
+ * @param tables the tables to substitute the data with
+ * @returns the substituted block of data
+ */
 const _qSubstitute = (block: bigint, tables: bigint[][]): bigint => {
   const t0 = (x: bigint): bigint => tables[0][Number(x)];
   const t1 = (x: bigint): bigint => tables[1][Number(x)];
@@ -361,6 +466,7 @@ const _qSubstitute = (block: bigint, tables: bigint[][]): bigint => {
 
   return 16n * b + a;
 };
+
 /**
  * Substitutes the data according to the q0 tables.
  * @param x the block of data to permute
@@ -393,53 +499,43 @@ const hash = (string: string): bigint => {
 };
 
 /**
- * Generates a random 64-bit key.
- * @returns a random 64-bit key.
+ * Generates a random 128-bit key.
+ * @returns a random 128-bit key.
  */
-const random64BitKey = (): number => {
-  return Math.floor(Math.random() * 2 ** 61);
+const random128BitKey = (): bigint => {
+  return hash(Math.floor((Math.random() + (10 ** 16)) * 10).toString()) & ((1n << 128n) - 1n);
 };
 
-/**
- * Takes a string and partitions it into 128-bit blocks of data.
- * @param text input string
- * @returns a sequence of 128-bit blocks of data.
- */
-const splitStringInto128BitBlocks = (text: string): bigint[] => {
-  let bits = 0n;
-  for (let i = 0; i < text.length; i++) {
-    bits <<= 8n;
-    bits += BigInt(text.charCodeAt(i));
-  }
 
+/**
+ * Extracts 128-bit blocks from an arbitrary-length integer.
+ * @param blob an arbitrary-length integer
+ * @returns an array of 128-bit integers
+ */
+const extract128BitBytesFromBLOB = (blob: bigint): bigint[] => {
   const blocks: bigint[] = [];
-  while (bits > 0) {
-    blocks.unshift(bits & ((1n << 128n) - 1n));
-    bits >>= 128n;
+  while (blob > 0) {
+    blocks.unshift(blob & ((1n << 128n) - 1n));
+    blob >>= 128n;
   }
 
   return blocks;
 };
 
 /**
- * This function concatenates the 128-bit blocks of data into a string.
- * @param blocks a sequence of 128-bit blocks of data.
- * @returns output string.
+ * Combines 128-bit blocks into an arbitrary-length integer.
+ * @param blocks array of 128-bit integers
+ * @returns an arbitrary-length integer
  */
-const extractStringFrom128BitBytes = (blocks: bigint[]): string => {
-  let text = "";
+const extractBLOBFrom128BitBytes = (blocks: bigint[]): bigint => {
+  let hex = 0n;
 
   for (const block of blocks) {
-    let extracted = "";
-    let bits = block;
-    while (bits > 0) {
-      extracted = String.fromCharCode(Number(bits & 0xffn)) + extracted;
-      bits >>= 8n;
-    }
-    text += extracted;
+    hex <<= 128n;
+    hex |= block;
   }
 
-  return text;
+  return hex;
 };
 
 /**
@@ -491,6 +587,12 @@ const ROR = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 
  */
 const ROR4 = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 4n, shiftAmount);
 
+/**
+ * Groups the data into groups consisting of at most [groupSize] elements.
+ * @param data the data to be grouped
+ * @param groupSize the size of each group
+ * @returns an array of groups of the specified size
+ */
 const groupData = <T>(data: T[], groupSize: number): T[][] => {
   const output: T[][] = [];
   for (let i = 0; i < data.length; i += groupSize) {
@@ -504,12 +606,13 @@ const groupData = <T>(data: T[], groupSize: number): T[][] => {
   return output;
 }
 
+/**
+ * Throws an error if the condition is false.
+ * @param condition the condition that must be true
+ * @param message a message to be shown if the condition is false
+ */
 const assert = (condition: boolean, message?: string) => {
   if (!condition) {
     throw new Error(message);
   }
 };
-
-const unimplemented = (): never => {
-  throw new Error("Unimplemented!");
-}
