@@ -1,16 +1,18 @@
+const hex = (n: bigint | number) => typeof n === "bigint" ? n.toString(16) : (n >>> 0).toString(16);
+
 export const encrypt: EncryptDecrypt = (text, key) => {
   /// Key resolution
   const resolvedKey = key == null ? random64BitKey().toString() : key;
   // const hashedKey = hash(resolvedKey) & ((1n << 128n) - 1n);
-  const hashedKey = 0x00000000000000000000000000000000n;
-  
+  const hashedKey = 0x000000000000000000000000ffffffffn;
+  // const hashedKey = 0x00000000000000000000000000000000n;
+
   const keySchedule = generateKeySchedule(hashedKey);
-  console.log(keySchedule[0].map(s => s.toString(16)));
 
   const blocks = splitStringInto128BitBlocks(text);
   const encryptedBytes = blocks.map((block) => encryptBlock(block, keySchedule));
 
-  return [[], encryptedBytes.map(s => s[1].toString(16)).join(""), resolvedKey];
+  return [[], encryptedBytes.map(s => s[1]).reduce((a, b) => a << 128n | b, 0n).toString(16), resolvedKey];
 };
 
 const k = 2; // 128 / 64
@@ -51,6 +53,7 @@ const PERMUTATION = {
   },
 };
 
+type IrreduciblePolynomial = 0b101101001n | 0b101001101n;
 
 type int32 = bigint;
 type KeySchedule = [subKeys: bigint[], S: bigint[]];
@@ -65,8 +68,8 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
   ///   The bytes are converted into 2k words of 32 bits each.
 
   const m: bigint[] = new Array(8 * k).fill(0n);
-  for (let i = 0; i <= 8 * k; ++i) {
-    m[i] = (key >> BigInt(8 * i)) & 0xFFn;
+  for (let i = 0; i < 8 * k; ++i) {
+    m[8 * k - 1 - i] = (key >> BigInt(8 * i)) & 0xFFn;
   }
 
   const M: bigint[] = new Array(2 * k).fill(0n);
@@ -78,18 +81,15 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
 
   const mEven: bigint[] = [];
   const mOdd: bigint[] = [];
-  for (let i = 0; i < M.length; ++i) {
-    if (i % 2 == 0) {
-      mEven.push(M[i]);
-    } else {
-      mOdd.push(M[i]);
-    }
+  for (let i = 0; i < M.length; i += 2) {
+    mEven.push(M[i]);
+    mOdd.push(M[i + 1]);
   }
 
   const s = new Array(k).fill(0).map(_ => new Array<bigint>(4).fill(0n));
-  const groupsOfBytes = groupData(m, 8);
-  for (let i = 0; i <= k - 1; ++i) {
-    s[i] = rs(groupsOfBytes[i]);
+  const vectors = groupData(m, 8);
+  for (let i = 0; i < k; ++i) {
+    s[i] = rs(vectors[i]);
   }
 
   const S = new Array<bigint>(k).fill(0n);
@@ -101,13 +101,12 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
   }
   S.reverse();
 
-  /// From here, the vectors [mEven, mOdd, S] are used for the key schedule.
-
   const rho = 0x1010101n;
-  const keys = [];
-  for (let i = 0; i < 20; ++i) {
-    const A = H((2n * BigInt(i) * rho) & ((1n << 32n) - 1n), mEven);
-    const B = ROL(H(((2n * BigInt(i)) * rho) & ((1n << 32n) - 1n), mOdd), 8n);
+  const keys: bigint[] = [];
+  for (let i = 0n; i < 20n; ++i) {
+    const A = H(2n * i * rho, mEven);
+    const B = ROL(H((2n * i + 1n) * rho, mOdd), 8n);
+
     const K2i = (A + B) & ((1n << 32n) - 1n);
     const K2i1 = ROL(A + 2n * B, 9n);
 
@@ -127,7 +126,7 @@ type EncryptDecryptBlock = (
  * Encrypts a block of data using the TwoFish algorithm.
  * @param block A block of 128-bit data.
  * @param keySchedule The key schedule generated.
- * @returns The encrypted block of data.
+ * @returns The encrypted block of 128-bit data.
  */
 const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   let data = block;
@@ -136,8 +135,6 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     bytes.unshift(data & 0xFFn);
     data >>= 0x8n;
   }
-  console.log(bytes.map(s => s.toString(2).padStart(8, "0")));
-  console.log(littleEndianConversion(bytes).map(s => s.toString(2).padStart(32, "0")));
 
   const P = littleEndianConversion(bytes);
   let [r0, r1, r2, r3] = inputWhiten(P, keySchedule);
@@ -154,7 +151,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
   let output = 0n;
-  for (let i = 0; i <= 15; ++i) {
+  for (let i = 0; i < 16; ++i) {
     output |= outputBytes[i] << BigInt(8 * i);
   }
 
@@ -184,7 +181,40 @@ const inverseLittleEndianConversion = (C: bigint[]): bigint[] => {
   return c;
 }
 
-const multiplyMatrixToVector = (matrix: bigint[][], vector: bigint[]): bigint[] => {
+/**
+ * Multiplies two elements in GF(2^8) over the irreducible polynomial as given by the user.
+ * @param a left operand
+ * @param b right operand
+ * @param irreduciblePolynomial the irreducible polynomial to use for GF(2^8) multiplication
+ * @returns the product of the two operands over G(2)[x]/(irreduciblePolynomial)
+ */
+const multiplyGF2_8 = (
+  a: bigint,
+  b: bigint,
+  irreduciblePolynomial: IrreduciblePolynomial
+): bigint => {
+  let product = 0n;
+  while (b > 0) {
+    if ((b & 1n) != 0n) {
+      product ^= a;
+    }
+
+    a <<= 1n;
+    b >>= 1n;
+
+    if (a & (1n << 8n)) {
+      a ^= irreduciblePolynomial;
+    }
+  }
+
+  return product;
+};
+
+const multiplyMatrixToVector = (
+  matrix: bigint[][],
+  vector: bigint[],
+  polynomial: IrreduciblePolynomial,
+): bigint[] => {
   if (matrix[0].length != vector.length) {
     throw new Error(`Cannot apply (${matrix.length}, ${matrix[0].length})-` +
       `matrix to ${vector.length}-vector`);
@@ -192,13 +222,9 @@ const multiplyMatrixToVector = (matrix: bigint[][], vector: bigint[]): bigint[] 
 
   const output: bigint[] = new Array(matrix.length).fill(0n);
   for (let i = 0; i < matrix.length; ++i) {
-    for (let j = 0; j < matrix[i].length; ++j) {
-      output[i] += matrix[i][j] * vector[j];
+    for (let j = 0; j < vector.length; ++j) {
+      output[i] ^= multiplyGF2_8(matrix[i][j], vector[j], polynomial);
     }
-  }
-
-  for (let i = 0; i < output.length; ++i) {
-    output[i] &= ((1n << 32n) - 1n);
   }
 
   return output;
@@ -222,8 +248,8 @@ const outputWhiten = (blocks: bigint[], [subKeys, S]: KeySchedule): bigint[] => 
   return blocks;
 };
 
-const rs = (block: bigint[]): bigint[] => multiplyMatrixToVector(MATRIX.rs, block);
-const mds = (block: bigint[]): bigint[] => multiplyMatrixToVector(MATRIX.mds, block);
+const rs = (block: bigint[]): bigint[] => multiplyMatrixToVector(MATRIX.rs, block, 0b101001101n);
+const mds = (block: bigint[]): bigint[] => multiplyMatrixToVector(MATRIX.mds, block, 0b101101001n);
 
 const F = (
   r0: int32,
@@ -231,41 +257,15 @@ const F = (
   round: number,
   [subKeys, S]: KeySchedule,
 ): [int32, int32] => {
-  const t0 = G(r0, [subKeys, S]);
-  const t1 = G(ROL(r1, 8n), [subKeys, S]);
+  const t0 = H(r0, S);
+  const t1 = H(ROL(r1, 8n), S);
 
-  const f0 = (t0 + t1 + subKeys[2 * round + 8]) & ((1n << 32n) - 1n);
-  const f1 = (t0 + 2n * t1 + subKeys[2 * round + 9]) & ((1n << 32n) - 1n);
+  const f0 = (t0 + t1 + subKeys[2 * round + 8]) & 0xFFn;
+  const f1 = (t0 + 2n * t1 + subKeys[2 * round + 9]) & 0xFFn;
 
   return [f0, f1];
 };
 
-/**
- * 
- * @param X a 32-bit word
- * @param param1 the key schedule
- * @returns 
- */
-const G = (X: int32, [subKeys, S]: KeySchedule): bigint => {
-  assert(0n <= X && X <= 2n ** 32n - 1n, "Word must be a 32-bit number");
-
-  /// [x] and [l] are byte-separations of [X] and [L] respectively.
-  const x: bigint[] = [];
-  const l: bigint[][] = [];
-  for (let j = 0; j <= 3; ++j) {
-    x[j] = (X >> BigInt(8 * j)) & ((1n << 8n) - 1n);
-  }
-
-  let [y0, y1, y2, y3] = [x[0], x[1], x[2], x[3]];
-  [y0, y1, y2, y3] = [q0(y0), q1(y1), q0(y2), q1(y3)];
-  [y0, y1, y2, y3] = [y0 ^ S[0], y1 ^ S[0], y2 ^ S[0], y3 ^ S[0]];
-  [y0, y1, y2, y3] = [q0(y0), q0(y1), q1(y2), q1(y3)];
-  [y0, y1, y2, y3] = [y0 ^ S[1], y1 ^ S[1], y2 ^ S[1], y3 ^ S[1]];
-  [y0, y1, y2, y3] = [q1(y0), q0(y1), q1(y2), q0(y3)];
-  const [z0, z1, z2, z3] = mds([y0, y1, y2, y3]);
-
-  return z0 | (z1 << 8n) | (z2 << 16n) | (z3 << 24n);
-};
 
 /**
  * 
@@ -281,13 +281,16 @@ const H = (X: int32, L: int32[]): int32 => {
   /// [x] and [l] are byte-separations of [X] and [L] respectively.
   const x: bigint[] = [];
   const l: bigint[][] = [];
-  for (let j = 0; j <= 3; ++j) {
-    x[j] = (X >> BigInt(8 * j)) & ((1n << 8n) - 1n);
+  for (let j = 0; j < 4; ++j) {
+    x[j] = (X >> BigInt(8 * j)) & 0xFFn;
+
     for (let i = 0; i <= k - 1; ++i) {
       l[i] ??= [];
-      l[i][j] = (L[i] >> BigInt(8 * j)) & ((1n << 8n) - 1n);
+      l[i][j] = (L[i] >> BigInt(8 * j)) & 0xFFn;
     }
   }
+
+
 
   let [y0, y1, y2, y3] = [x[0], x[1], x[2], x[3]];
   [y0, y1, y2, y3] = [q0(y0), q1(y1), q0(y2), q1(y3)];
@@ -300,29 +303,12 @@ const H = (X: int32, L: int32[]): int32 => {
   return z0 | (z1 << 8n) | (z2 << 16n) | (z3 << 24n);
 };
 
-/**
- * Permutes the block of data as specified in the table. The table must be 1-indexed.
- * Values in the table need not to be unique.
- * @param block block of data to permute.
- * @param table an array of indices to permute the block of data with.
- * @returns the permuted block of data.
- */
-const permute = (block: bigint, table: bigint[]): bigint => {
-  let permuted = 0n;
-  for (let i = 0; i < table.length; i++) {
-    permuted <<= 1n;
-    permuted |= (block >> (table[i] - 1n)) & 1n;
-  }
 
-  return permuted;
-};
-
-
-const _qPermute = (block: bigint, tables: bigint[][]): bigint => {
-  const t0 = (x: bigint): bigint => permute(x, tables[0]);
-  const t1 = (x: bigint): bigint => permute(x, tables[1]);
-  const t2 = (x: bigint): bigint => permute(x, tables[2]);
-  const t3 = (x: bigint): bigint => permute(x, tables[3]);
+const _qSubstitute = (block: bigint, tables: bigint[][]): bigint => {
+  const t0 = (x: bigint): bigint => tables[0][Number(x)];
+  const t1 = (x: bigint): bigint => tables[1][Number(x)];
+  const t2 = (x: bigint): bigint => tables[2][Number(x)];
+  const t3 = (x: bigint): bigint => tables[3][Number(x)];
 
   let [a, b] = [block / 16n, block % 16n];
   [a, b] = [a ^ b, ((a ^ ROR4(b, 1n) ^ 8n * a)) % 16n];
@@ -333,18 +319,18 @@ const _qPermute = (block: bigint, tables: bigint[][]): bigint => {
   return 16n * b + a;
 };
 /**
- * Permutes the data according to the q0 tables.
+ * Substitutes the data according to the q0 tables.
  * @param x the block of data to permute
  * @returns the permuted block of data
  */
-const q0 = (x: bigint): bigint => _qPermute(x, Object.values(PERMUTATION.q0));
+const q0 = (x: bigint): bigint => _qSubstitute(x, Object.values(PERMUTATION.q0));
 
 /**
- * Permutes the data according to the q1 tables.
+ * Substitutes the data according to the q1 tables.
  * @param x the block of data to permute
  * @returns the permuted block of data
  */
-const q1 = (x: bigint): bigint => _qPermute(x, Object.values(PERMUTATION.q1));
+const q1 = (x: bigint): bigint => _qSubstitute(x, Object.values(PERMUTATION.q1));
 
 /**
  * Based off the code at this post from user <b>sfussenegger</b>:
