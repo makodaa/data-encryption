@@ -1,4 +1,4 @@
-
+const BIT_128 = (1n << 128n) - 1n;
 
 export const encrypt: EncryptDecrypt = (messageHex, key) => {
   const encryptedBlocks: bigint[] = [];
@@ -6,7 +6,7 @@ export const encrypt: EncryptDecrypt = (messageHex, key) => {
 
   /// Key resolution
   const resolvedKey = key || random128BitKey().toString();
-  const hashedKey = hash(resolvedKey) & ((1n << 128n) - 1n);
+  const hashedKey = hash(resolvedKey) & BIT_128;
 
   const keySchedule = generateKeySchedule(hashedKey);
   const blocks = extract128BitBytesFromBLOB(messageHex);
@@ -31,7 +31,7 @@ export const decrypt: EncryptDecrypt = (messageHex, key) => {
 
   /// Key resolution
   const resolvedKey = key || random128BitKey().toString();
-  const hashedKey = hash(resolvedKey) & ((1n << 128n) - 1n);
+  const hashedKey = hash(resolvedKey) & BIT_128;
 
   const keySchedule = generateKeySchedule(hashedKey);
   const blocks = extract128BitBytesFromBLOB(messageHex);
@@ -503,7 +503,7 @@ const hash = (string: string): bigint => {
  * @returns a random 128-bit key.
  */
 const random128BitKey = (): bigint => {
-  return hash(Math.floor((Math.random() + (10 ** 16)) * 10).toString()) & ((1n << 128n) - 1n);
+  return hash(Math.floor((Math.random() + (10 ** 16)) * 10).toString()) & BIT_128;
 };
 
 
@@ -515,7 +515,7 @@ const random128BitKey = (): bigint => {
 const extract128BitBytesFromBLOB = (blob: bigint): bigint[] => {
   const blocks: bigint[] = [];
   while (blob > 0) {
-    blocks.unshift(blob & ((1n << 128n) - 1n));
+    blocks.unshift(blob & BIT_128);
     blob >>= 128n;
   }
 

@@ -123,10 +123,10 @@ const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }): bigi
 
     for (let i = contiguousKeys.length - 1; i >= 0; i -= 6) {
       groups.push([
-        contiguousKeys[i - 3],
-        contiguousKeys[i - 2],
-        contiguousKeys[i - 1],
-        contiguousKeys[i],
+        multiplicativeInverse(contiguousKeys[i - 3]),
+        additiveInverse(contiguousKeys[i - 2]),
+        additiveInverse(contiguousKeys[i - 1]),
+        multiplicativeInverse(contiguousKeys[i]),
         contiguousKeys[i - 5],
         contiguousKeys[i - 4],
       ].filter((s) => s != null));
@@ -166,16 +166,6 @@ const add = (left: bigint, right: bigint): bigint => {
 };
 
 /**
- * Takes the difference of two big integers modulo 2^16.
- * @param left the left operand
- * @param right the right operand
- * @returns the difference of two operands module 2^16
- */
-const subtract = (left: bigint, right: bigint): bigint => {
-  return add(left, additiveInverse(right));
-};
-
-/**
  * Multiplies two big integers modulo 2^16 + 1.
  * This follows the property that range(a mod b) = [0, b).
  * @param left the left operand
@@ -183,29 +173,24 @@ const subtract = (left: bigint, right: bigint): bigint => {
  * @returns the product of the two operands modulo 2^16 + 1
  */
 const multiply = (left: bigint, right: bigint): bigint => {
-  const initialResult = (left * right) % ((1n << 16n) + 1n);
+  const result = left * right;
+  if (result != 0n) {
+    return (result % 0x10001n) & 0xFFFFn;
+  }
 
-  return initialResult < 0n //
-    ? initialResult + ((1n << 16n) + 1n)
-    : initialResult;
+  if (left != 0n || right != 0n) {
+    return ((0x10001n - left - right) % 0x10001n) & 0xFFFFn;
+  }
+  return 1n;
 };
 
-/**
- * Takes the division of two big integers modulo 2^16 + 1.
- * @param left the left operand
- * @param right the right operand
- * @returns the product of the inverse of the right operand and the left operand modulo 2^16 + 1
- */
-const divide = (left: bigint, right: bigint): bigint => {
-  return multiply(left, multiplicativeInverse(right));
-};
 
 /**
  * Returns the additive inverse of a value mod 2^16.
  * @param value the value to find the additive inverse of
  * @returns the additive inverse of the value mod 2^16
  */
-const additiveInverse = (value: bigint): bigint => (0x10000n - value) % 0x10000n;
+const additiveInverse = (value: bigint): bigint => ((0x10000n - value) % 0x10000n) & 0xFFFFn;
 
 /**
  * Returns the multiplicative inverse of a value mod (2^16 + 1).
@@ -213,6 +198,10 @@ const additiveInverse = (value: bigint): bigint => (0x10000n - value) % 0x10000n
  * @returns the multiplicative inverse of the value mod (2^16 + 1)
  */
 const multiplicativeInverse = (value: bigint): bigint => {
+  if (value <= 1n) {
+    return value;
+  }
+
   let t = 0n;
   let r = 0x10001n;
   let newT = 1n;
@@ -309,14 +298,14 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   for (let i = 0; i < 8; ++i) {
     const [z1, z2, z3, z4, z5, z6] = keySchedule[i];
 
-    //  1. Multiply X1 and the inverse of first subkey Z1.
-    const y1 = divide(x1, z1);
-    //  2. Add X2 and the inverse of second subkey Z2.
-    const y2 = subtract(x2, z2);
-    //  3. Add X3 and the inverse of third subkey Z3.
-    const y3 = subtract(x3, z3);
-    //  4. Multiply X4 and the inverse of fourth subkey Z4.
-    const y4 = divide(x4, z4);
+    //  1. Multiply X1 and the first subkey Z1.
+    const y1 = multiply(x1, z1);
+    //  2. Add X2 and the second subkey Z2.
+    const y2 = add(x2, z2);
+    //  3. Add X3 and the third subkey Z3.
+    const y3 = add(x3, z3);
+    //  4. Multiply X4 and the fourth subkey Z4.
+    const y4 = multiply(x4, z4);
     //  5. Bitwise XOR the results of steps 1 and 3.
     const y5 = y1 ^ y3;
     //  6. Bitwise XOR the results of steps 2 and 4.
@@ -344,10 +333,10 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
 
   // Round 8.5.
   const [z1, z2, z3, z4] = keySchedule[8];
-  const y1 = divide(x1, z1);
-  const y2 = subtract(x2, z2);
-  const y3 = subtract(x3, z3);
-  const y4 = divide(x4, z4);
+  const y1 = multiply(x1, z1);
+  const y2 = add(x2, z2);
+  const y3 = add(x3, z3);
+  const y4 = multiply(x4, z4);
   partialOutputs.push([y1, y2, y3, y4]);
 
   return [partialOutputs, (y1 << 48n) | (y2 << 32n) | (y3 << 16n) | y4];
