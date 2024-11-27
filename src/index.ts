@@ -1,3 +1,4 @@
+import * as ChaCha20 from "./algorithms/chacha20";
 import * as IDEA from "./algorithms/idea";
 import * as TwoFish from "./algorithms/twofish";
 import { bytesToString, stringToBytes } from "./utils";
@@ -66,7 +67,7 @@ downloadText.addEventListener("click", () => {
     URL.revokeObjectURL(url);
 });
 
-runAlgorithmButton.addEventListener("click", () => {
+runAlgorithmButton.addEventListener("click", async () => {
     console.log("Hi");
     console.log(form.inputString);
 
@@ -74,25 +75,32 @@ runAlgorithmButton.addEventListener("click", () => {
     const type = form.selectProcess.value;
     const encryptionType = form.selectEncryption.value as string;
     const key = form.inputKey.value;
+    const nonce = parseInt(form.inputNonce.value || NaN);
+    if (Number.isNaN(nonce) && encryptionType == "chacha20") {
+        alert("Please enter a valid nonce.");
+        return;
+    }
 
-    if (encryptionType != "twofish" && encryptionType != "idea") {
+    if (encryptionType != "twofish" && encryptionType != "idea" && encryptionType != "chacha20") {
         return;
     }
 
     const encryptionFunctions = {
         twofish: TwoFish.encrypt,
         idea: IDEA.encrypt,
+        chacha20: ChaCha20.encrypt,
     };
     const decryptionFunctions = {
         twofish: TwoFish.decrypt,
         idea: IDEA.decrypt,
+        chacha20: ChaCha20.decrypt,
     };
 
     switch (type) {
         case "encrypt": {
             /// Since we want to encrypt, we need to do the following steps:
             ///  1. Convert the input string to bytes.
-            ///  2. Encrypt the bytes using the TwoFish algorithm.
+            ///  2. Encrypt the bytes using the chosen algorithm.
             ///  3. Convert the encrypted bytes to a hex string.
             ///  4. Display the hex string and the partial outputs.
             const encryptionFunction = encryptionFunctions[
@@ -100,14 +108,15 @@ runAlgorithmButton.addEventListener("click", () => {
             ] as typeof TwoFish.encrypt;
 
             const bytes = stringToBytes(inputString);
-            const [partialOutputs, encrypted, resolvedKey] = encryptionFunction(
+            const [partialOutputs, encrypted, resolvedKey] = await encryptionFunction(
                 bytes,
-                key
+                key,
+                Number.isNaN(nonce) ? 0n : BigInt(nonce),
             );
 
             processHolder.innerHTML = "";
             for (let i = 0; i < partialOutputs.length; ++i) {
-                const partialOutput = partialOutputs[i];
+                const [title, content] = partialOutputs[i];
                 const processDiv = document.createElement("div");
                 processDiv.classList.add(
                     "d-flex",
@@ -118,14 +127,18 @@ runAlgorithmButton.addEventListener("click", () => {
                 );
                 const processSpan = document.createElement("span");
                 processSpan.classList.add("p");
-                processSpan.textContent = `Process ${i}: ${partialOutput.map((s) => s.map((v) => `0x${v.toString(16)}`).join(", ")).join("\t")}`;
+                processSpan.textContent = title;
 
-                const metadataSpan = document.createElement("span");
-                metadataSpan.classList.add("p", "text-primary");
-                metadataSpan.textContent = "Test test 1 2 3";
+                const metadataContent = document.createElement("div");
+                for (const line of content.split("\n")) {
+                    const metadataSpan = document.createElement("div");
+                    metadataSpan.classList.add("p", "text-primary");
+                    metadataSpan.textContent = line;
+                    metadataContent.appendChild(metadataSpan);
+                }
 
                 processDiv.appendChild(processSpan);
-                processDiv.appendChild(metadataSpan);
+                processDiv.appendChild(metadataContent);
                 processHolder.appendChild(processDiv);
             }
 
@@ -153,14 +166,15 @@ runAlgorithmButton.addEventListener("click", () => {
             ] as typeof IDEA.encrypt;
 
             const bytes = BigInt(`0x${inputString}`);
-            const [partialOutputs, encrypted, resolvedKey] = decryptionFunction(
+            const [partialOutputs, encrypted, resolvedKey] = await decryptionFunction(
                 bytes,
-                key
+                key,
+                Number.isNaN(nonce) ? 0n : BigInt(nonce),
             );
 
             processHolder.innerHTML = "";
             for (let i = 0; i < partialOutputs.length; ++i) {
-                const partialOutput = partialOutputs[i];
+                const [title, content] = partialOutputs[i];
                 const processDiv = document.createElement("div");
                 processDiv.classList.add(
                     "d-flex",
@@ -171,11 +185,11 @@ runAlgorithmButton.addEventListener("click", () => {
                 );
                 const processSpan = document.createElement("span");
                 processSpan.classList.add("p");
-                processSpan.textContent = `Process ${i}: ${partialOutput.map((s) => s.map((v) => `0x${v.toString(16)}`).join(", ")).join("\t")}`;
+                processSpan.textContent = title;
 
                 const metadataSpan = document.createElement("span");
                 metadataSpan.classList.add("p", "text-primary");
-                metadataSpan.textContent = "Test test 1 2 3";
+                metadataSpan.textContent = content;
 
                 processDiv.appendChild(processSpan);
                 processDiv.appendChild(metadataSpan);

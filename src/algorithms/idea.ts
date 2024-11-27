@@ -1,3 +1,4 @@
+
 /**
  * IDEA (International Data Encryption Algorithm) is a symmetric key block cipher
  *   that operates on 64-bit blocks of data using a 128-bit key.
@@ -16,6 +17,8 @@
  *   Lai, X., Massey, J.L. (1991). A Proposal for a New Block Encryption Standard. In: Damgård, I.B. (eds) Advances in Cryptology — EUROCRYPT ’90. EUROCRYPT 1990. Lecture Notes in Computer Science, vol 473. Springer, Berlin, Heidelberg. https://doi.org/10.1007/3-540-46877-3_35
  */
 
+import { EncryptDecrypt, hashKeyBySHA256 } from "../utils";
+
 
 const BIT_128 = (1n << 128n) - 1n;
 
@@ -25,10 +28,14 @@ const BIT_128 = (1n << 128n) - 1n;
  * @param key a string key
  * @returns the encrypted text
  */
-export const encrypt: EncryptDecrypt = (messageHex, key) => {
+export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
+  /// Output preparation
+  const partialOutputs: [title: string, content: string][] = [];
+  const encryptedBlocks: bigint[] = [];
+
   /// Key resolution
-  const resolvedKey = key || random128BitKey().toString();
-  const hashedKey = hash(resolvedKey) & BIT_128;
+  const resolvedKey = key || random128BitKey();
+  const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
 
   /// Generation of key schedule
   const keySchedule = createKeySchedule(hashedKey, { inverse: false });
@@ -36,18 +43,17 @@ export const encrypt: EncryptDecrypt = (messageHex, key) => {
   const blocks = extract64BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((b) => encryptBlock(b, keySchedule));
 
-  const partialOutputs: [bigint, bigint, bigint, bigint][][] = [];
-  const encryptedBlocks: bigint[] = [];
-
   /// Extract the partial outputs and the encrypted blocks.
-  for (const [partialOutput, encryptedBlock] of outputs) {
+  for (const [partialOutput, decryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      partialOutputs[i] ??= [];
-      partialOutputs[i].push(partialOutput[i]);
+      if (partialOutputs[i] == null) {
+        partialOutputs[i] = partialOutput[i];
+      } else {
+        partialOutputs[i][1] += "\n" + partialOutput[i][1];
+      }
     }
-    encryptedBlocks.push(encryptedBlock);
+    encryptedBlocks.push(decryptedBlock);
   }
-
   const encryptedText = extractBLOBFrom64BitBytes(encryptedBlocks);
   return [partialOutputs, encryptedText, resolvedKey];
 };
@@ -58,21 +64,28 @@ export const encrypt: EncryptDecrypt = (messageHex, key) => {
  * @param key a string key
  * @returns the decrypted text
  */
-export const decrypt: EncryptDecrypt = (messageHex, key) => {
-  const resolvedKey = key || random128BitKey().toString();
-  const hashedKey = hash(resolvedKey) & BIT_128;
-  const keySchedule = createKeySchedule(hashedKey, { inverse: true });
-
-  const blocks = extract64BitBytesFromBLOB(messageHex);
-  const outputs = blocks.map((b) => decryptBlock(b, keySchedule));
-  const partialOutputs: [bigint, bigint, bigint, bigint][][] = [];
+export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
+  /// Output preparation
+  const partialOutputs: [title: string, content: string][] = [];
   const decryptedBlocks: bigint[] = [];
 
-  /// Extract the partial outputs and the encrypted blocks.
+  /// Key resolution
+  const resolvedKey = key || random128BitKey();
+  const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
+  const keySchedule = createKeySchedule(hashedKey, { inverse: true });
+
+  /// Decryption of the blocks
+  const blocks = extract64BitBytesFromBLOB(messageHex);
+  const outputs = blocks.map((b) => decryptBlock(b, keySchedule));
+
+  /// Extract the partial outputs and the decrypted blocks.
   for (const [partialOutput, decryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      partialOutputs[i] ??= [];
-      partialOutputs[i].push(partialOutput[i]);
+      if (partialOutputs[i] == null) {
+        partialOutputs[i] = partialOutput[i];
+      } else {
+        partialOutputs[i][1] += "\n" + partialOutput[i][1];
+      }
     }
     decryptedBlocks.push(decryptedBlock);
   }
@@ -81,9 +94,6 @@ export const decrypt: EncryptDecrypt = (messageHex, key) => {
 
   return [partialOutputs, decryptedText, resolvedKey];
 };
-
-type EncryptDecrypt = (messageHex: bigint, key?: string) => //
-  [partialOutputs: [bigint, bigint, bigint, bigint][][], finalOutput: bigint, key: string];
 
 /**
  * Cyclically shifts a block to the left by the specified amount.
@@ -222,7 +232,7 @@ const multiplicativeInverse = (value: bigint): bigint => {
 };
 
 type EncryptDecryptBlock = (block: bigint, keySchedule: bigint[][]) => //
-  [[bigint, bigint, bigint, bigint][], bigint];
+  [[title: string, content: string][], bigint];
 
 /**
  * Encrypts a block of data using the IDEA algorithm.
@@ -231,10 +241,13 @@ type EncryptDecryptBlock = (block: bigint, keySchedule: bigint[][]) => //
  * @returns The encrypted block of data.
  */
 const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [bigint, bigint, bigint, bigint][] = [];
+  const partialOutputs: [title: string, content: string][] = [];
 
   let [x1, x2, x3, x4] = extractBitsIntoBlocks(block, 16n, 4n);
-  partialOutputs.push([x1, x2, x3, x4]);
+  partialOutputs.push([
+    `Splitting 64-bit block into 4 16-bit blocks`,
+    `${x1}, ${x2}, ${x3}, ${x4}`,
+  ]);
 
   for (let i = 0; i < 8; ++i) {
     const [z1, z2, z3, z4, z5, z6] = keySchedule[i];
@@ -269,7 +282,11 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     const y14 = y4 ^ y10;
 
     [x1, x2, x3, x4] = [y11, y13, y12, y14];
-    partialOutputs.push([x1, x2, x3, x4]);
+
+    partialOutputs.push([
+      `Round ${i + 1}`,
+      `${x1}, ${x2}, ${x3}, ${x4}`,
+    ]);
   }
 
   // Round 8.5.
@@ -278,7 +295,10 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   const y2 = add(x2, z2);
   const y3 = add(x3, z3);
   const y4 = multiply(x4, z4);
-  partialOutputs.push([y1, y2, y3, y4]);
+  partialOutputs.push([
+    `Round 8.5`,
+    `${y1}, ${y2}, ${y3}, ${y4}`,
+  ]);
 
   return [partialOutputs, (y1 << 48n) | (y2 << 32n) | (y3 << 16n) | y4];
 };
@@ -290,10 +310,14 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
  * @returns The encrypted block of data.
  */
 const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [bigint, bigint, bigint, bigint][] = [];
+  const partialOutputs: [title: string, content: string][] = [];
 
   let [x1, x2, x3, x4] = extractBitsIntoBlocks(block, 16n, 4n);
-  partialOutputs.push([x1, x2, x3, x4]);
+  partialOutputs.push([
+    `Splitting 64-bit block into 4 16-bit blocks`,
+    `${x1}, ${x2}, ${x3}, ${x4}`,
+  ]);
+
 
   for (let i = 0; i < 8; ++i) {
     const [z1, z2, z3, z4, z5, z6] = keySchedule[i];
@@ -328,7 +352,10 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     const y14 = y4 ^ y10;
 
     [x1, x2, x3, x4] = [y11, y13, y12, y14];
-    partialOutputs.push([x1, x2, x3, x4]);
+    partialOutputs.push([
+      `Round ${i + 1}`,
+      `${x1}, ${x2}, ${x3}, ${x4}`,
+    ]);
   }
 
   // Round 8.5.
@@ -337,7 +364,10 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   const y2 = add(x2, z2);
   const y3 = add(x3, z3);
   const y4 = multiply(x4, z4);
-  partialOutputs.push([y1, y2, y3, y4]);
+  partialOutputs.push([
+    `Round 8.5`,
+    `${y1}, ${y2}, ${y3}, ${y4}`,
+  ]);
 
   return [partialOutputs, (y1 << 48n) | (y2 << 32n) | (y3 << 16n) | y4];
 };
@@ -401,6 +431,6 @@ const hash = (string: string): bigint => {
  * Generates a random 128-bit key.
  * @returns a random 128-bit key.
  */
-const random128BitKey = (): bigint => {
-  return hash(Math.floor((Math.random() + (10 ** 16)) * 10).toString()) & ((1n << 128n) - 1n);
+const random128BitKey = (): string => {
+  return Math.floor((Math.random() + (10 ** 16)) * 10).toString();
 };

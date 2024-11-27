@@ -1,23 +1,30 @@
+import { EncryptDecrypt, hashKeyBySHA256, random128BitKey } from "../utils";
+
+
 const BIT_128 = (1n << 128n) - 1n;
 
-export const encrypt: EncryptDecrypt = (messageHex, key) => {
+export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
   const encryptedBlocks: bigint[] = [];
-  const partialOutputs: [bigint, bigint, bigint, bigint][][] = [];
+  const partialOutputs: [title: string, content: string][] = [];
 
   /// Key resolution
-  const resolvedKey = key || random128BitKey().toString();
-  const hashedKey = hash(resolvedKey) & BIT_128;
+  const resolvedKey = key || random128BitKey();
+  const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
 
   const keySchedule = generateKeySchedule(hashedKey);
   const blocks = extract128BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((block) => encryptBlock(block, keySchedule));
+
   /// Extract the partial outputs and the encrypted blocks.
-  for (const [partialOutput, encryptedBlock] of outputs) {
+  for (const [partialOutput, decryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      partialOutputs[i] ??= [];
-      partialOutputs[i].push(partialOutput[i]);
+      if (partialOutputs[i] == null) {
+        partialOutputs[i] = partialOutput[i];
+      } else {
+        partialOutputs[i][1] += "\n " + partialOutput[i][1];
+      }
     }
-    encryptedBlocks.push(encryptedBlock);
+    encryptedBlocks.push(decryptedBlock);
   }
 
   const output = extractBLOBFrom128BitBytes(encryptedBlocks);
@@ -25,27 +32,30 @@ export const encrypt: EncryptDecrypt = (messageHex, key) => {
   return [partialOutputs, output, resolvedKey];
 };
 
-export const decrypt: EncryptDecrypt = (messageHex, key) => {
-  const encryptedBlocks: bigint[] = [];
-  const partialOutputs: [bigint, bigint, bigint, bigint][][] = [];
+export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
+  const decryptedBlocks: bigint[] = [];
+  const partialOutputs: [title: string, content: string][] = [];
 
   /// Key resolution
-  const resolvedKey = key || random128BitKey().toString();
-  const hashedKey = hash(resolvedKey) & BIT_128;
+  const resolvedKey = key || random128BitKey();
+  const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
 
   const keySchedule = generateKeySchedule(hashedKey);
   const blocks = extract128BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((block) => decryptBlock(block, keySchedule));
-  /// Extract the partial outputs and the encrypted blocks.
+
+  /// Extract the partial outputs and the decrypted blocks.
   for (const [partialOutput, decryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      partialOutputs[i] ??= [];
-      partialOutputs[i].push(partialOutput[i]);
+      if (partialOutputs[i] == null) {
+        partialOutputs[i] = partialOutput[i];
+      } else {
+        partialOutputs[i][1] += "\n" + partialOutput[i][1];
+      }
     }
-    encryptedBlocks.push(decryptedBlock);
+    decryptedBlocks.push(decryptedBlock);
   }
-
-  const output = extractBLOBFrom128BitBytes(encryptedBlocks);
+  const output = extractBLOBFrom128BitBytes(decryptedBlocks);
 
   return [partialOutputs, output, resolvedKey];
 };
@@ -98,8 +108,6 @@ type IrreduciblePolynomial = 0b101101001n | 0b101001101n;
  * The key schedule produces two outputs: the subkeys and the S-boxes.
  */
 type KeySchedule = [K: bigint[], S: bigint[]];
-type EncryptDecrypt = (messageHex: bigint, key?: string) => //
-  [partialOutputs: [bigint, bigint, bigint, bigint][][], finalOutput: bigint, key: string];
 
 /**
  * This function generates the subkeys and S-boxes for the TwoFish algorithm.
@@ -162,7 +170,7 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
 type EncryptDecryptBlock = (
   block: bigint,
   keySchedule: KeySchedule,
-) => [[bigint, bigint, bigint, bigint][], bigint];
+) => [[title: string, content: string][], bigint];
 
 /**
  * Encrypts a block of data using the TwoFish algorithm.
@@ -171,13 +179,21 @@ type EncryptDecryptBlock = (
  * @returns The encrypted block of 128-bit data.
  */
 const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [bigint, bigint, bigint, bigint][] = [];
+  const partialOutputs: [title: string, content: string][] = [];
+
 
   const bytes = extractBytesFromBlob(block, 16n);
-  const P = littleEndianConversion(bytes);
-  let [r0, r1, r2, r3] = inputWhiten(P, keySchedule);
+  let [r0, r1, r2, r3] = littleEndianConversion(bytes);
+  partialOutputs.push([
+    "Input Block",
+    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+  ]);
 
-  partialOutputs.push([r0, r1, r2, r3]);
+  [r0, r1, r2, r3] = inputWhiten([r0, r1, r2, r3], keySchedule);
+  partialOutputs.push([
+    "Input Whitening",
+    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+  ]);
 
   /// In each of the 16 rounds, the first two words are used as the input to the function F,
   ///   which also takes the round number as input. The third word is XOR'd with the first output
@@ -186,11 +202,17 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     const [f0, f1] = F(r0, r1, r, keySchedule);
     [r0, r1, r2, r3] = [ROR(r2 ^ f0, 1n), ROL(r3, 1n) ^ f1, r0, r1];
 
-    partialOutputs.push([r0, r1, r2, r3]);
+    partialOutputs.push([
+      `Round ${r + 1}`,
+      `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+    ]);
   }
 
   [r0, r1, r2, r3] = outputWhiten([r2, r3, r0, r1], keySchedule);
-  partialOutputs.push([r0, r1, r2, r3]);
+  partialOutputs.push([
+    "Output Whitening",
+    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+  ]);
 
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
@@ -209,13 +231,21 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
  * @returns The decrypted block of 128-bit data.
  */
 const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [bigint, bigint, bigint, bigint][] = [];
+  const partialOutputs: [title: string, content: string][] = [];
 
   const bytes = extractBytesFromBlob(block, 16n);
-  const P = littleEndianConversion(bytes);
-  let [r0, r1, r2, r3] = outputWhiten(P, keySchedule);
+  let [r0, r1, r2, r3] = littleEndianConversion(bytes);
+  partialOutputs.push([
+    "Input Block",
+    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+  ]);
 
-  partialOutputs.push([r0, r1, r2, r3]);
+  [r0, r1, r2, r3] = outputWhiten([r0, r1, r2, r3], keySchedule);
+  partialOutputs.push([
+    "Reverse Output Whitening",
+    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`,
+  ]);
+
   /// In each of the 16 rounds, the first two words are used as the input to the function F,
   ///   which also takes the round number as input. The third word is XOR'd with the first output
   ///   of F, and then rotated by left.
@@ -223,11 +253,17 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     const [f0, f1] = F(r0, r1, r, keySchedule);
     [r0, r1, r2, r3] = [ROL(r2, 1n) ^ f0, ROR(r3 ^ f1, 1n), r0, r1];
 
-    partialOutputs.push([r0, r1, r2, r3]);
+    partialOutputs.push([
+      `Round ${16 - r}`,
+      `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+    ]);
   }
 
   [r0, r1, r2, r3] = inputWhiten([r2, r3, r0, r1], keySchedule);
-  partialOutputs.push([r0, r1, r2, r3]);
+  partialOutputs.push([
+    "Reverse Input Whitening",
+    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+  ]);
 
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
@@ -353,7 +389,7 @@ const inputWhiten = (blocks: bigint[], [K, S]: KeySchedule): bigint[] => {
     outputBlocks[i] = blocks[i] ^ K[i];
   }
 
-  return blocks;
+  return outputBlocks;
 };
 
 /**
@@ -365,10 +401,10 @@ const inputWhiten = (blocks: bigint[], [K, S]: KeySchedule): bigint[] => {
 const outputWhiten = (blocks: bigint[], [K, S]: KeySchedule): bigint[] => {
   const outputBlocks: bigint[] = [...blocks];
   for (let i = 0; i < 4; ++i) {
-    outputBlocks[i] = blocks[(i + 2) % 4] ^ K[i + 4];
+    outputBlocks[i] = blocks[i] ^ K[i + 4];
   }
 
-  return blocks;
+  return outputBlocks;
 };
 
 /**
@@ -418,10 +454,6 @@ const F = (r0: bigint, r1: bigint, round: number, [K, S]: KeySchedule): [bigint,
  * @returns The result of the H function.
  */
 const H = (X: bigint, L: bigint[]): bigint => {
-  assert(0n <= X && X <= 2n ** 32n - 1n, "Word must be a 32-bit number");
-  L.every((s) => assert(0n <= s && s <= 2n ** 32n - 1n, "Word must be a 32-bit number"));
-  assert(L.length == k, "The amount of values in [l] must be equal to [k]");
-
   /// [x] and [l] are byte-separations of [X] and [L] respectively.
   const x: bigint[] = [];
   const l: bigint[][] = [];
@@ -480,32 +512,6 @@ const q0 = (x: bigint): bigint => _qSubstitute(x, Object.values(PERMUTATION.q0))
  * @returns the permuted block of data
  */
 const q1 = (x: bigint): bigint => _qSubstitute(x, Object.values(PERMUTATION.q1));
-
-/**
- * Based off the code at this post from user <b>sfussenegger</b>:
- *  https://stackoverflow.com/questions/1660501/what-is-a-good-64bit-hash-function-in-java-for-textual-strings
- * @param string input string
- * @returns a hash of the input string.
- */
-const hash = (string: string): bigint => {
-  let h = 1125899906842597n; // prime
-  const len = string.length;
-
-  for (let i = 0; i < len; i++) {
-    h = 31n * h + BigInt(string.charCodeAt(i));
-  }
-
-  return h;
-};
-
-/**
- * Generates a random 128-bit key.
- * @returns a random 128-bit key.
- */
-const random128BitKey = (): bigint => {
-  return hash(Math.floor((Math.random() + (10 ** 16)) * 10).toString()) & BIT_128;
-};
-
 
 /**
  * Extracts 128-bit blocks from an arbitrary-length integer.
@@ -605,14 +611,3 @@ const groupData = <T>(data: T[], groupSize: number): T[][] => {
 
   return output;
 }
-
-/**
- * Throws an error if the condition is false.
- * @param condition the condition that must be true
- * @param message a message to be shown if the condition is false
- */
-const assert = (condition: boolean, message?: string) => {
-  if (!condition) {
-    throw new Error(message);
-  }
-};

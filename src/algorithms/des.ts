@@ -1,3 +1,5 @@
+import { hashKeyBySHA256 } from "../utils";
+
 /**
  * This is an implementation of the Data Encryption Standard (DES) algorithm.
  * The DES algorithm is a symmetric-key algorithm for the encryption of digital data.
@@ -11,9 +13,9 @@
  * @param key a string key
  * @returns the encrypted text
  */
-export const encrypt: EncryptDecrypt = (text, key) => {
+export const encrypt: EncryptDecrypt = async (text, key) => {
   const resolvedKey = key == null ? random64BitKey().toString() : key;
-  const hashedKey = hash(resolvedKey);
+  const hashedKey = await hashKeyBySHA256(resolvedKey);
   const keySchedule = createKeySchedule(hashedKey);
 
   const blocks = splitInto64BitBlocks(text);
@@ -55,9 +57,9 @@ export const encrypt: EncryptDecrypt = (text, key) => {
  * @param key a string key
  * @returns the decrypted text
  */
-export const decrypt: EncryptDecrypt = (text, key) => {
+export const decrypt: EncryptDecrypt = async (text, key) => {
   const resolvedKey = key == null ? random64BitKey().toString() : key;
-  const hashedKey = hash(resolvedKey);
+  const hashedKey = await hashKeyBySHA256(resolvedKey);
   const keySchedule = createKeySchedule(hashedKey);
 
   const bits = splitInto64BitBlocks(text);
@@ -94,7 +96,7 @@ export const decrypt: EncryptDecrypt = (text, key) => {
 type EncryptDecrypt = (
   text: string,
   key?: string
-) => [partialOutputs: string[], finalOutput: string, key: string];
+) => Promise<[partialOutputs: string[], finalOutput: string, key: string]>;
 
 /**
  * These are the built-in tables used in the DES algorithm.
@@ -416,23 +418,6 @@ const createKeySchedule = (key: bigint): bigint[] => {
   }
 
   return separatedKeySchedule.slice(1).map(([c, d]) => permuteJoin(c, d, BUILTIN.pc2));
-};
-
-/**
- * Based off the code at this post from user <b>sfussenegger</b>:
- *  https://stackoverflow.com/questions/1660501/what-is-a-good-64bit-hash-function-in-java-for-textual-strings
- * @param string input string
- * @returns a hash of the input string.
- */
-const hash = (string: string): bigint => {
-  let h = 1125899906842597n; // prime
-  const len = string.length;
-
-  for (let i = 0; i < len; i++) {
-    h = 31n * h + BigInt(string.charCodeAt(i));
-  }
-
-  return h;
 };
 
 /**
