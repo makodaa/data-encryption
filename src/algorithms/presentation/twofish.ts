@@ -1,63 +1,28 @@
-import { EncryptDecrypt, hashKeyBySHA256, random128BitKey } from "../utils";
-
+import { EncryptDecrypt, hashKeyBySHA256 } from "./utils";
 
 const BIT_128 = (1n << 128n) - 1n;
+const BIT_32 = (1n << 32n) - 1n;
 
 export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
-  const encryptedBlocks: bigint[] = [];
-  const partialOutputs: [title: string, content: string][] = [];
-
   /// Key resolution
-  const resolvedKey = key || random128BitKey();
-  const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
-
+  const hashedKey = await hashKeyBySHA256(key) & BIT_128;
   const keySchedule = generateKeySchedule(hashedKey);
   const blocks = extract128BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((block) => encryptBlock(block, keySchedule));
+  const output = extractBLOBFrom128BitBytes(outputs);
 
-  /// Extract the partial outputs and the encrypted blocks.
-  for (const [partialOutput, decryptedBlock] of outputs) {
-    for (let i = 0; i < partialOutput.length; i++) {
-      if (partialOutputs[i] == null) {
-        partialOutputs[i] = partialOutput[i];
-      } else {
-        partialOutputs[i][1] += "\n " + partialOutput[i][1];
-      }
-    }
-    encryptedBlocks.push(decryptedBlock);
-  }
-
-  const output = extractBLOBFrom128BitBytes(encryptedBlocks);
-
-  return [partialOutputs, output, resolvedKey];
+  return output;
 };
 
 export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
-  const decryptedBlocks: bigint[] = [];
-  const partialOutputs: [title: string, content: string][] = [];
-
   /// Key resolution
-  const resolvedKey = key || random128BitKey();
-  const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
-
+  const hashedKey = await hashKeyBySHA256(key) & BIT_128;
   const keySchedule = generateKeySchedule(hashedKey);
   const blocks = extract128BitBytesFromBLOB(messageHex);
-  const outputs = blocks.map((block) => decryptBlock(block, keySchedule));
-
-  /// Extract the partial outputs and the decrypted blocks.
-  for (const [partialOutput, decryptedBlock] of outputs) {
-    for (let i = 0; i < partialOutput.length; i++) {
-      if (partialOutputs[i] == null) {
-        partialOutputs[i] = partialOutput[i];
-      } else {
-        partialOutputs[i][1] += "\n" + partialOutput[i][1];
-      }
-    }
-    decryptedBlocks.push(decryptedBlock);
-  }
+  const decryptedBlocks = blocks.map((block) => decryptBlock(block, keySchedule));
   const output = extractBLOBFrom128BitBytes(decryptedBlocks);
 
-  return [partialOutputs, output, resolvedKey];
+  return output;
 };
 
 const k = 2; // 128 / 64
@@ -157,7 +122,7 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
     const A = H(2n * i * rho, mEven);
     const B = ROL(H((2n * i + 1n) * rho, mOdd), 8n);
 
-    const K2i = (A + B) & ((1n << 32n) - 1n);
+    const K2i = (A + B) & BIT_32;
     const K2i1 = ROL(A + 2n * B, 9n);
 
     keys.push(K2i);
@@ -170,7 +135,7 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
 type EncryptDecryptBlock = (
   block: bigint,
   keySchedule: KeySchedule,
-) => [[title: string, content: string][], bigint];
+) => bigint;
 
 /**
  * Encrypts a block of data using the TwoFish algorithm.
@@ -179,21 +144,9 @@ type EncryptDecryptBlock = (
  * @returns The encrypted block of 128-bit data.
  */
 const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [title: string, content: string][] = [];
-
-
   const bytes = extractBytesFromBlob(block, 16n);
   let [r0, r1, r2, r3] = littleEndianConversion(bytes);
-  partialOutputs.push([
-    "Input Block",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
-  ]);
-
   [r0, r1, r2, r3] = inputWhiten([r0, r1, r2, r3], keySchedule);
-  partialOutputs.push([
-    "Input Whitening",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
-  ]);
 
   /// In each of the 16 rounds, the first two words are used as the input to the function F,
   ///   which also takes the round number as input. The third word is XOR'd with the first output
@@ -201,19 +154,9 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   for (let r = 0; r < 16; ++r) {
     const [f0, f1] = F(r0, r1, r, keySchedule);
     [r0, r1, r2, r3] = [ROR(r2 ^ f0, 1n), ROL(r3, 1n) ^ f1, r0, r1];
-
-    partialOutputs.push([
-      `Round ${r + 1}`,
-      `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
-    ]);
   }
 
   [r0, r1, r2, r3] = outputWhiten([r2, r3, r0, r1], keySchedule);
-  partialOutputs.push([
-    "Output Whitening",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
-  ]);
-
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
   let output = 0n;
@@ -221,7 +164,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     output |= outputBytes[15 - i] << BigInt(8 * i);
   }
 
-  return [partialOutputs, output];
+  return output;
 };
 
 /**
@@ -231,20 +174,9 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
  * @returns The decrypted block of 128-bit data.
  */
 const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [title: string, content: string][] = [];
-
   const bytes = extractBytesFromBlob(block, 16n);
   let [r0, r1, r2, r3] = littleEndianConversion(bytes);
-  partialOutputs.push([
-    "Input Block",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
-  ]);
-
   [r0, r1, r2, r3] = outputWhiten([r0, r1, r2, r3], keySchedule);
-  partialOutputs.push([
-    "Reverse Output Whitening",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`,
-  ]);
 
   /// In each of the 16 rounds, the first two words are used as the input to the function F,
   ///   which also takes the round number as input. The third word is XOR'd with the first output
@@ -252,19 +184,9 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   for (let r = 15; r >= 0; --r) {
     const [f0, f1] = F(r0, r1, r, keySchedule);
     [r0, r1, r2, r3] = [ROL(r2, 1n) ^ f0, ROR(r3 ^ f1, 1n), r0, r1];
-
-    partialOutputs.push([
-      `Round ${16 - r}`,
-      `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
-    ]);
   }
 
   [r0, r1, r2, r3] = inputWhiten([r2, r3, r0, r1], keySchedule);
-  partialOutputs.push([
-    "Reverse Input Whitening",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
-  ]);
-
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
   let output = 0n;
@@ -272,7 +194,7 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     output |= outputBytes[15 - i] << BigInt(8 * i);
   }
 
-  return [partialOutputs, output];
+  return output;
 };
 
 /**
@@ -313,9 +235,10 @@ const littleEndianConversion = (p: bigint[]): bigint[] => {
  * @returns the contiguous bytes of the 128-bit block
  */
 const inverseLittleEndianConversion = (C: bigint[]): bigint[] => {
-  const c = new Array(16)//
-    .fill(0)
-    .map((_, i) => (C[~~(i / 4)] >> BigInt(8 * (i % 4))) & 0xFFn);
+  const c: bigint[] = [];
+  for (let i = 0; i < 16; ++i) {
+    c.push((C[~~(i / 4)] >> BigInt(8 * (i % 4))) & 0xFFn);
+  }
 
   return c;
 }
