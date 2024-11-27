@@ -131,10 +131,7 @@ runAlgorithmButton.addEventListener("click", () => {
 
             // Display the input, key, and output.
 
-            inputResult.textContent =
-                inputString.length > 250
-                    ? `${inputString.substring(0, 250)}...`
-                    : inputString;
+            inputResult.textContent = inputString;
             keyResult.textContent = resolvedKey;
             outputResult.textContent = encrypted.toString(16);
 
@@ -187,10 +184,7 @@ runAlgorithmButton.addEventListener("click", () => {
 
             // Display the input, key, and output.
 
-            inputResult.textContent =
-                inputString.length > 250
-                    ? `${inputString.substring(0, 250)}...`
-                    : inputString;
+            inputResult.textContent = inputString;
             keyResult.textContent = resolvedKey;
             outputResult.textContent = bytesToString(encrypted);
 
