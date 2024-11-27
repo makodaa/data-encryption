@@ -1,130 +1,197 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Coconet - Data Encryption</title>
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-      integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65"
-      crossorigin="anonymous"
-    />
-    <script src="https://kit.fontawesome.com/526e3dd711.js" crossorigin="anonymous"></script>
-    <script
-      src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"
-      integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4"
-      crossorigin="anonymous"
-    ></script>
-  </head>
-  <body class="vh-100 d-flex flex-column">
-    <nav class="navbar bg-light border-bottom">
-      <div class="container-fluid">
-        <span class="navbar-brand">
-          <i class="fa-solid fa-globe"></i>
-          Coconut - Data Encryption</span
-        >
-      </div>
-    </nav>
-    <div class="row row-cols-2 d-flex flex-fill gx-0">
-      <div class="col d-flex flex-fill flex-column p-2">
-        <div class="d-flex flex-fill flex-column">
-          <div class="d-flex flex-column mb-3">
-            <span class="h3">Usage</span>
-            <span class="p mb-3"
-              >The following program encrypts and decrypts string messages through the use of
-              <b>Two Fish, , and International Data Encryption Algorithm (IDEA).</b></span
-            >
-            <span class="p"
-              >To use the program, kindly fill the input field with the desired string to encode,
-              select the process if either encrypt and decrypt, and select which encryption
-              algorithm to use.</span
-            >
-          </div>
-        </div>
-        <div class="d-flex flex-fill flex-column">
-          <div class="d-flex flex-column">
-            <form>
-              <div class="mb-3">
-                <label for="inputString" class="form-label">Input String</label>
-                <textarea
-                  name="inputString"
-                  id="inputString"
-                  class="form-control"
-                  rows="12"
-                  style="resize: none"
-                ></textarea>
-              </div>
-              <div class="mb-3">
-                <label for="inputKey" class="form-label">Key</label>
-                <input type="text" name="inputKey" id="inputKey" class="form-control" />
-              </div>
-              <div class="row mb-3">
-                <div class="col">
-                  <label for="selectProcess" class="form-label">Encrypt or Decrypt</label>
-                  <select class="form-select" name="selectProcess" id="selectProcess">
-                    <option selected value="encrypt">Encrypt (Plaintext)</option>
-                    <option value="decrypt">Decrypt (Hexadecimal)</option>
-                  </select>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Coconet - Data Encryption</title>
+        <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css"
+            rel="stylesheet"
+            integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65"
+            crossorigin="anonymous"
+        />
+        <script
+            src="https://kit.fontawesome.com/526e3dd711.js"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4"
+            crossorigin="anonymous"
+        ></script>
+    </head>
+    <body class="vh-100 d-flex flex-column">
+        <nav class="navbar bg-light border-bottom">
+            <div class="container-fluid">
+                <span class="navbar-brand">
+                    <i class="fa-solid fa-globe"></i>
+                    Coconut - Data Encryption</span
+                >
+            </div>
+        </nav>
+        <div class="row row-cols-2 d-flex flex-fill gx-0">
+            <div class="col d-flex flex-fill flex-column p-2">
+                <div class="d-flex flex-fill flex-column">
+                    <div class="d-flex flex-column mb-3">
+                        <span class="h3">Usage</span>
+                        <span class="p mb-3"
+                            >The following program encrypts and decrypts string
+                            messages through the use of
+                            <b
+                                >Two Fish, , and International Data Encryption
+                                Algorithm (IDEA).</b
+                            ></span
+                        >
+                        <span class="p"
+                            >To use the program, kindly fill the input field
+                            with the desired string to encode, select the
+                            process if either encrypt and decrypt, and select
+                            which encryption algorithm to use.</span
+                        >
+                    </div>
                 </div>
-                <div class="col">
-                  <label for="selectEncryption" class="form-label">Encryption Method</label>
-                  <select class="form-select" name="selectEncryption" id="selectEncryption">
-                    <option selected value="twofish">Two Fish</option>
-                    <option value="chacha20">ChaCha20</option>
-                    <option value="idea">IDEA</option>
-                  </select>
+                <div class="d-flex flex-fill flex-column">
+                    <div class="d-flex flex-column">
+                        <form>
+                            <div class="mb-3">
+                                <label for="inputString" class="form-label"
+                                    >Input String</label
+                                >
+                                <textarea
+                                    name="inputString"
+                                    id="inputString"
+                                    class="form-control"
+                                    rows="8"
+                                    style="resize: none"
+                                ></textarea>
+                            </div>
+                            <div
+                                class="d-flex align-items-center justify-content-center"
+                            >
+                                <div class="">
+                                    <span class="p">- - OR - -</span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="formFile" class="form-label"
+                                    >Input a file</label
+                                >
+                                <input
+                                    class="form-control"
+                                    type="file"
+                                    id="fileInput"
+                                    accept=".txt"
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="inputKey" class="form-label"
+                                    >Key</label
+                                >
+                                <input
+                                    type="text"
+                                    name="inputKey"
+                                    id="inputKey"
+                                    class="form-control"
+                                />
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label
+                                        for="selectProcess"
+                                        class="form-label"
+                                        >Encrypt or Decrypt</label
+                                    >
+                                    <select
+                                        class="form-select"
+                                        name="selectProcess"
+                                        id="selectProcess"
+                                    >
+                                        <option selected value="encrypt">
+                                            Encrypt (Plaintext)
+                                        </option>
+                                        <option value="decrypt">
+                                            Decrypt (Hexadecimal)
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="col">
+                                    <label
+                                        for="selectEncryption"
+                                        class="form-label"
+                                        >Encryption Method</label
+                                    >
+                                    <select
+                                        class="form-select"
+                                        name="selectEncryption"
+                                        id="selectEncryption"
+                                    >
+                                        <option selected value="twofish">
+                                            Two Fish
+                                        </option>
+                                        <option value="chacha20">
+                                            ChaCha20
+                                        </option>
+                                        <option value="idea">IDEA</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mb-3 p-0">
+                                <div class="d-flex justify-content-end">
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary"
+                                        id="run-algorithm"
+                                    >
+                                        Run Algorithm
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-              </div>
-              <div class="row mb-3 p-0">
-                <div class="d-flex justify-content-end">
-                  <button type="button" class="btn btn-primary" id="run-algorithm">
-                    Run Algorithm
-                  </button>
+            </div>
+            <div class="col d-flex flex-fill flex-column border-start">
+                <div class="d-flex flex-fill flex-column border-bottom p-2">
+                    <span class="h3">Process</span>
+                    <div
+                        class="d-flex flex-fill flex-column"
+                        id="process-holder"
+                        style="height: 400px; overflow-y: scroll"
+                    ></div>
                 </div>
-              </div>
-            </form>
-          </div>
+                <div class="d-flex flex-fill flex-column p-2">
+                    <span class="h3">Output</span>
+                    <span class="p overflow-auto">
+                        Input String
+                        <span id="input-type"></span>:
+                        <span
+                            id="output-input-string"
+                            style="height: 50px; overflow-y: scroll"
+                        ></span>
+                    </span>
+                    <span class="p"
+                        >Encryption Key: <span id="output-key-result"></span
+                    ></span>
+                    <span class="p overflow-auto mb-3">
+                        Output
+                        <span id="output-type"></span>:
+                        <span
+                            id="output-output-result"
+                            style="overflow-x: scroll"
+                        ></span>
+                    </span>
+                    <div class="d-flex flex-fill justify-content-end">
+                        <div class="d-flex align-items-end">
+                            <button
+                                class="d-none btn btn-primary"
+                                id="download-text"
+                            >
+                                Download Text
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-      <div class="col d-flex flex-fill flex-column border-start">
-        <div class="d-flex flex-fill flex-column border-bottom p-2">
-          <span class="h3">Process</span>
-          <div class="d-flex flex-fill flex-column overflow-scroll" id="process-holder">
-            <div class="d-flex flex-column p-2 mb-3 border">
-              <span class="p">
-                Process 1: Lorem ipsum, dolor sit amet consectetur adipisicing elit.
-              </span>
-            </div>
-            <div class="d-flex flex-column p-2 mb-3 border">
-              <span class="p"
-                >Process 2: Lorem ipsum dolor sit, amet consectetur adipisicing elit. Dolor velit ab
-                dolores?
-              </span>
-            </div>
-            <div class="d-flex flex-column p-2 mb-3 border">
-              <span class="p"
-                >Process 3: Lorem ipsum dolor sit amet, consectetur adipisicing elit. Nisi.</span
-              >
-            </div>
-            <div class="d-flex flex-column p-2 mb-3 border">
-              <span class="p">Process 4: Lorem.</span>
-            </div>
-          </div>
-        </div>
-        <div class="d-flex flex-fill flex-column p-2">
-          <span class="h3">Output</span>
-          <span class="p">
-            Input String <span id="input-type"></span>:
-            <span id="output-input-string"></span>
-          </span>
-          <span class="p">Encryption Key: <span id="output-key-result"></span></span>
-          <span class="p overflow-auto">
-            Output <span id="output-type"></span>:
-            <span id="output-output-result"></span>
-          </span>
-        </div>
-      </div>
-    </div>
-  </body>
+    </body>
 </html>

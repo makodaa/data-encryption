@@ -31,95 +31,177 @@ const outputResult = document.getElementById("output-output-result");
 
 const inputType = document.getElementById("input-type");
 const outputType = document.getElementById("output-type");
+const fileInput = document.getElementById("fileInput");
+const downloadText = document.getElementById("download-text");
+
+var temporaryText = "";
+
+fileInput.addEventListener("change", (e) => {
+    const file = (e.target as HTMLInputElement).files[0];
+    if (file && file.type === "text/plain") {
+        const reader = new FileReader();
+
+        reader.onload = function (e) {
+            const content = e.target.result;
+            (document.getElementById("inputString") as HTMLInputElement).value =
+                content as string;
+        };
+
+        reader.readAsText(file);
+    } else {
+        alert("Please upload a valid text file.");
+    }
+});
+
+downloadText.addEventListener("click", () => {
+    console.log("hello?");
+    const blob = new Blob([temporaryText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "output.txt";
+
+    link.click();
+    URL.revokeObjectURL(url);
+});
 
 runAlgorithmButton.addEventListener("click", () => {
-  console.log("Hi");
-  console.log(form.inputString);
+    console.log("Hi");
+    console.log(form.inputString);
 
-  const inputString = form.inputString.value;
-  const type = form.selectProcess.value;
-  const encryptionType = form.selectEncryption.value as string;
-  const key = form.inputKey.value;
+    const inputString = form.inputString.value;
+    const type = form.selectProcess.value;
+    const encryptionType = form.selectEncryption.value as string;
+    const key = form.inputKey.value;
 
-  if (encryptionType != "twofish" && encryptionType != "idea") {
-    return;
-  }
-
-  const encryptionFunctions = { twofish: TwoFish.encrypt, idea: IDEA.encrypt };
-  const decryptionFunctions = { twofish: TwoFish.decrypt, idea: IDEA.decrypt };
-
-  switch (type) {
-    case "encrypt": {
-      /// Since we want to encrypt, we need to do the following steps:
-      ///  1. Convert the input string to bytes.
-      ///  2. Encrypt the bytes using the TwoFish algorithm.
-      ///  3. Convert the encrypted bytes to a hex string.
-      ///  4. Display the hex string and the partial outputs.
-      const encryptionFunction = encryptionFunctions[encryptionType] as typeof TwoFish.encrypt;
-
-      const bytes = stringToBytes(inputString);
-      const [partialOutputs, encrypted, resolvedKey] = encryptionFunction(bytes, key);
-
-      processHolder.innerHTML = "";
-      for (let i = 0; i < partialOutputs.length; ++i) {
-        const partialOutput = partialOutputs[i];
-        const processDiv = document.createElement("div");
-        processDiv.classList.add("d-flex", "flex-column", "p-2", "mb-3", "border");
-        const processSpan = document.createElement("span");
-        processSpan.classList.add("p");
-        processSpan.textContent = `Process ${i}: ${partialOutput.map(s => s.map(v => `0x${v.toString(16)}`).join(", ")).join("\t")}`;
-
-        processDiv.appendChild(processSpan);
-        processHolder.appendChild(processDiv);
-      }
-
-      // Display the input, key, and output.
-
-      inputResult.textContent = inputString;
-      keyResult.textContent = resolvedKey;
-      outputResult.textContent = encrypted.toString(16);
-
-      inputType.textContent = `(Plaintext)`;
-      outputType.textContent = `(Hexadecimal)`
-
-      break;
+    if (encryptionType != "twofish" && encryptionType != "idea") {
+        return;
     }
-    case "decrypt": {
-      /// Since we want to encrypt, we need to do the following steps:
-      ///  1. Convert the input string to bytes.
-      ///  2. Encrypt the bytes using the TwoFish algorithm.
-      ///  3. Convert the encrypted bytes to a hex string.
-      ///  4. Display the hex string and the partial outputs.
-      const decryptionFunction = decryptionFunctions[encryptionType] as typeof IDEA.encrypt;
 
-      const bytes = BigInt(`0x${inputString}`);
-      const [partialOutputs, encrypted, resolvedKey] = decryptionFunction(bytes, key);
+    const encryptionFunctions = {
+        twofish: TwoFish.encrypt,
+        idea: IDEA.encrypt,
+    };
+    const decryptionFunctions = {
+        twofish: TwoFish.decrypt,
+        idea: IDEA.decrypt,
+    };
 
-      processHolder.innerHTML = "";
-      for (let i = 0; i < partialOutputs.length; ++i) {
-        const partialOutput = partialOutputs[i];
-        const processDiv = document.createElement("div");
-        processDiv.classList.add("d-flex", "flex-column", "p-2", "mb-3", "border");
-        const processSpan = document.createElement("span");
-        processSpan.classList.add("p");
-        processSpan.textContent = `Process ${i}: ${partialOutput.map(s => s.map(v => `0x${v.toString(16)}`).join(", ")).join("\t")}`;
+    switch (type) {
+        case "encrypt": {
+            /// Since we want to encrypt, we need to do the following steps:
+            ///  1. Convert the input string to bytes.
+            ///  2. Encrypt the bytes using the TwoFish algorithm.
+            ///  3. Convert the encrypted bytes to a hex string.
+            ///  4. Display the hex string and the partial outputs.
+            const encryptionFunction = encryptionFunctions[
+                encryptionType
+            ] as typeof TwoFish.encrypt;
 
-        processDiv.appendChild(processSpan);
-        processHolder.appendChild(processDiv);
-      }
+            const bytes = stringToBytes(inputString);
+            const [partialOutputs, encrypted, resolvedKey] = encryptionFunction(
+                bytes,
+                key
+            );
 
-      // Display the input, key, and output.
+            processHolder.innerHTML = "";
+            for (let i = 0; i < partialOutputs.length; ++i) {
+                const partialOutput = partialOutputs[i];
+                const processDiv = document.createElement("div");
+                processDiv.classList.add(
+                    "d-flex",
+                    "flex-column",
+                    "p-2",
+                    "mb-3",
+                    "border"
+                );
+                const processSpan = document.createElement("span");
+                processSpan.classList.add("p");
+                processSpan.textContent = `Process ${i}: ${partialOutput.map((s) => s.map((v) => `0x${v.toString(16)}`).join(", ")).join("\t")}`;
 
-      inputResult.textContent = inputString;
-      keyResult.textContent = resolvedKey;
-      outputResult.textContent = bytesToString(encrypted);
+                const metadataSpan = document.createElement("span");
+                metadataSpan.classList.add("p", "text-primary");
+                metadataSpan.textContent = "Test test 1 2 3";
 
-      inputType.textContent = `(Hexadecimal)`;
-      outputType.textContent = `(Plaintext)`
+                processDiv.appendChild(processSpan);
+                processDiv.appendChild(metadataSpan);
+                processHolder.appendChild(processDiv);
+            }
 
-      break;
+            // Display the input, key, and output.
+
+            inputResult.textContent =
+                inputString.length > 250
+                    ? `${inputString.substring(0, 250)}...`
+                    : inputString;
+            keyResult.textContent = resolvedKey;
+            outputResult.textContent = encrypted.toString(16);
+
+            inputType.textContent = `(Plaintext)`;
+            outputType.textContent = `(Hexadecimal)`;
+
+            temporaryText = encrypted.toString(16);
+            downloadText.classList.remove("d-none");
+            break;
+        }
+        case "decrypt": {
+            /// Since we want to encrypt, we need to do the following steps:
+            ///  1. Convert the input string to bytes.
+            ///  2. Encrypt the bytes using the TwoFish algorithm.
+            ///  3. Convert the encrypted bytes to a hex string.
+            ///  4. Display the hex string and the partial outputs.
+            const decryptionFunction = decryptionFunctions[
+                encryptionType
+            ] as typeof IDEA.encrypt;
+
+            const bytes = BigInt(`0x${inputString}`);
+            const [partialOutputs, encrypted, resolvedKey] = decryptionFunction(
+                bytes,
+                key
+            );
+
+            processHolder.innerHTML = "";
+            for (let i = 0; i < partialOutputs.length; ++i) {
+                const partialOutput = partialOutputs[i];
+                const processDiv = document.createElement("div");
+                processDiv.classList.add(
+                    "d-flex",
+                    "flex-column",
+                    "p-2",
+                    "mb-3",
+                    "border"
+                );
+                const processSpan = document.createElement("span");
+                processSpan.classList.add("p");
+                processSpan.textContent = `Process ${i}: ${partialOutput.map((s) => s.map((v) => `0x${v.toString(16)}`).join(", ")).join("\t")}`;
+
+                const metadataSpan = document.createElement("span");
+                metadataSpan.classList.add("p", "text-primary");
+                metadataSpan.textContent = "Test test 1 2 3";
+
+                processDiv.appendChild(processSpan);
+                processDiv.appendChild(metadataSpan);
+                processHolder.appendChild(processDiv);
+            }
+
+            // Display the input, key, and output.
+
+            inputResult.textContent =
+                inputString.length > 250
+                    ? `${inputString.substring(0, 250)}...`
+                    : inputString;
+            keyResult.textContent = resolvedKey;
+            outputResult.textContent = bytesToString(encrypted);
+
+            inputType.textContent = `(Hexadecimal)`;
+            outputType.textContent = `(Plaintext)`;
+
+            temporaryText = encrypted.toString(16);
+            downloadText.classList.remove("d-none");
+            break;
+        }
     }
-  }
 
-  console.log(type);
+    console.log(type);
 });
