@@ -1,3 +1,7 @@
+/**
+ * 
+ */
+
 import { EncryptDecrypt, hashKeyBySHA256, random128BitKey } from "../utils";
 
 export const encrypt: EncryptDecrypt = async (input: bigint, key?: string, nonce?: bigint) => {
@@ -7,7 +11,7 @@ export const encrypt: EncryptDecrypt = async (input: bigint, key?: string, nonce
   const [partialOutputs, outputStream] = xorKeyStream(messageBytes, keyBytes, nonce);
   const output = extractBlobFromBytes(outputStream);
 
-  return [partialOutputs, output, resolvedKey];
+  return [partialOutputs, output, resolvedKey, keyBytes];
 };
 
 export const decrypt: EncryptDecrypt = async (input: bigint, key?: string, nonce?: bigint) => {
@@ -17,7 +21,7 @@ export const decrypt: EncryptDecrypt = async (input: bigint, key?: string, nonce
   const [partialOutputs, outputStream] = xorKeyStream(messageBytes, keyBytes, nonce);
   const output = extractBlobFromBytes(outputStream);
 
-  return [partialOutputs, output, resolvedKey];
+  return [partialOutputs, output, resolvedKey, keyBytes];
 }
 
 type ChaCha20State = [
@@ -249,22 +253,3 @@ const extractBlobFromBytes = (blocks: bigint[]): bigint => {
 
   return hex;
 };
-
-/**
- * Groups the data into groups consisting of at most [groupSize] elements.
- * @param data the data to be grouped
- * @param groupSize the size of each group
- * @returns an array of groups of the specified size
- */
-const groupData = <T>(data: T[], groupSize: number): T[][] => {
-  const output: T[][] = [];
-  for (let i = 0; i < data.length; i += groupSize) {
-    const group: T[] = [];
-    for (let j = i; j < data.length && j < i + groupSize; ++j) {
-      group.push(data[j]);
-    }
-    output.push(group);
-  }
-
-  return output;
-}

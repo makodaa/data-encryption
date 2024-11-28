@@ -43,4 +43,4 @@ export const random128BitKey = (): string => {
 
 
 export type EncryptDecrypt = (messageHex: bigint, key?: string, nonce?: bigint) => //
-  Promise<[partialOutputs: [title: string, value: string][], finalOutput: bigint, key: string]>;
+  Promise<[partialOutputs: [title: string, value: string][], finalOutput: bigint, key: string, keyHash: bigint]>;

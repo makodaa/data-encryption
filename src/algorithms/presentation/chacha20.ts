@@ -1,3 +1,15 @@
+/**
+ * ChaCha20 is a symmetric stream cipher that operates on continuous streams of data
+ *   using a 256-bit key and a 96-bit nonce.
+ * 
+ * The generation of the key stream depends on the key, nonce, and a block counter.
+ *   A state consisting of 16 32-bit words is initialized, then run through 20 rounds of
+ *   quarter-round operations.
+ * 
+ * The resulting state is then streamed through a function, which applies bitwise-XOR
+ *  to the input data and the key stream.
+ */
+
 import { EncryptDecrypt, hashKeyBySHA256 } from "./utils";
 
 export const encrypt: EncryptDecrypt = async (input: bigint, key: string, nonce?: bigint) => {
@@ -131,7 +143,7 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint): bigint[] => {
 
 /**
  * Generates an infinite iterable of ChaCha20 key stream bytes.
- *   It is generated JIT.
+ *   It is generated Just in Time.
  * @param key the input key
  * @param nonce the input once value.
  */
@@ -163,7 +175,6 @@ const xorKeyStream = (input: bigint[], key: bigint, nonce: bigint): bigint[] => 
 
   for (const byte of input) {
     const keyByte = keyGen.next().value as bigint;
-
     const result = byte ^ keyByte;
     output.push(result);
   }
@@ -202,22 +213,3 @@ const extractBlobFromBytes = (blocks: bigint[]): bigint => {
 
   return hex;
 };
-
-/**
- * Groups the data into groups consisting of at most [groupSize] elements.
- * @param data the data to be grouped
- * @param groupSize the size of each group
- * @returns an array of groups of the specified size
- */
-const groupData = <T>(data: T[], groupSize: number): T[][] => {
-  const output: T[][] = [];
-  for (let i = 0; i < data.length; i += groupSize) {
-    const group: T[] = [];
-    for (let j = i; j < data.length && j < i + groupSize; ++j) {
-      group.push(data[j]);
-    }
-    output.push(group);
-  }
-
-  return output;
-}

@@ -29,7 +29,7 @@ export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
 
   const output = extractBLOBFrom128BitBytes(encryptedBlocks);
 
-  return [partialOutputs, output, resolvedKey];
+  return [partialOutputs, output, resolvedKey, hashedKey];
 };
 
 export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
@@ -57,7 +57,7 @@ export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
   }
   const output = extractBLOBFrom128BitBytes(decryptedBlocks);
 
-  return [partialOutputs, output, resolvedKey];
+  return [partialOutputs, output, resolvedKey, hashedKey];
 };
 
 const k = 2; // 128 / 64

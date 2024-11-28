@@ -1,7 +1,7 @@
 import * as ChaCha20 from "./algorithms/chacha20";
 import * as IDEA from "./algorithms/idea";
 import * as TwoFish from "./algorithms/twofish";
-import { bytesToString, stringToBytes } from "./utils";
+import { bytesToString, EncryptDecrypt, stringToBytes } from "./utils";
 
 console.log("Hello World!");
 
@@ -28,6 +28,7 @@ const processHolder = document.getElementById("process-holder");
 
 const inputResult = document.getElementById("output-input-string");
 const keyResult = document.getElementById("output-key-result");
+const keyHashResult = document.getElementById("output-key-hash-result");
 const outputResult = document.getElementById("output-output-result");
 
 const inputType = document.getElementById("input-type");
@@ -37,179 +38,189 @@ const downloadText = document.getElementById("download-text");
 
 var temporaryText = "";
 
-fileInput.addEventListener("change", (e) => {
-    const file = (e.target as HTMLInputElement).files[0];
-    if (file && file.type === "text/plain") {
-        const reader = new FileReader();
+form.selectEncryption.addEventListener("change", () => {
+  if (form.selectEncryption.value.trim() == "chacha20") {
+    document.getElementById("nonce-group").classList.remove("hidden");
+  } else {
+    document.getElementById("nonce-group").classList.add("hidden");
+  }
+});
 
-        reader.onload = function (e) {
-            const content = e.target.result;
-            (document.getElementById("inputString") as HTMLInputElement).value =
-                content as string;
-        };
+fileInput.addEventListener("change", (e: Event) => {
+  const file = (e.target as HTMLInputElement).files[0];
+  if (file && file.type === "text/plain") {
+    const reader = new FileReader();
 
-        reader.readAsText(file);
-    } else {
-        alert("Please upload a valid text file.");
-    }
+    reader.onload = function (e) {
+      const content = e.target.result;
+      (document.getElementById("inputString") as HTMLInputElement).value =
+        content as string;
+    };
+
+    reader.readAsText(file);
+  } else {
+    alert("Please upload a valid text file.");
+  }
 });
 
 downloadText.addEventListener("click", () => {
-    console.log("hello?");
-    const blob = new Blob([temporaryText], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
+  console.log("hello?");
+  const blob = new Blob([temporaryText], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
 
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "output.txt";
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "output.txt";
 
-    link.click();
-    URL.revokeObjectURL(url);
+  link.click();
+  URL.revokeObjectURL(url);
 });
 
 runAlgorithmButton.addEventListener("click", async () => {
-    console.log("Hi");
-    console.log(form.inputString);
+  console.log("Hi");
+  console.log(form.inputString);
 
-    const inputString = form.inputString.value;
-    const type = form.selectProcess.value;
-    const encryptionType = form.selectEncryption.value as string;
-    const key = form.inputKey.value;
-    const nonce = parseInt(form.inputNonce.value || NaN);
-    if (Number.isNaN(nonce) && encryptionType == "chacha20") {
-        alert("Please enter a valid nonce.");
-        return;
-    }
+  const inputString = form.inputString.value;
+  const type = form.selectProcess.value;
+  const encryptionType = form.selectEncryption.value as string;
+  const key = form.inputKey.value;
+  const nonce = parseInt(form.inputNonce.value || NaN);
+  if (Number.isNaN(nonce) && encryptionType == "chacha20") {
+    alert("Please enter a valid nonce.");
+    return;
+  }
 
-    if (encryptionType != "twofish" && encryptionType != "idea" && encryptionType != "chacha20") {
-        return;
-    }
+  if (encryptionType != "twofish" && encryptionType != "idea" && encryptionType != "chacha20") {
+    return;
+  }
 
-    const encryptionFunctions = {
-        twofish: TwoFish.encrypt,
-        idea: IDEA.encrypt,
-        chacha20: ChaCha20.encrypt,
-    };
-    const decryptionFunctions = {
-        twofish: TwoFish.decrypt,
-        idea: IDEA.decrypt,
-        chacha20: ChaCha20.decrypt,
-    };
+  const encryptionFunctions = {
+    twofish: TwoFish.encrypt,
+    idea: IDEA.encrypt,
+    chacha20: ChaCha20.encrypt,
+  };
+  const decryptionFunctions = {
+    twofish: TwoFish.decrypt,
+    idea: IDEA.decrypt,
+    chacha20: ChaCha20.decrypt,
+  };
 
-    switch (type) {
-        case "encrypt": {
-            /// Since we want to encrypt, we need to do the following steps:
-            ///  1. Convert the input string to bytes.
-            ///  2. Encrypt the bytes using the chosen algorithm.
-            ///  3. Convert the encrypted bytes to a hex string.
-            ///  4. Display the hex string and the partial outputs.
-            const encryptionFunction = encryptionFunctions[
-                encryptionType
-            ] as typeof TwoFish.encrypt;
+  switch (type) {
+    case "encrypt": {
+      /// Since we want to encrypt, we need to do the following steps:
+      ///  1. Convert the input string to bytes.
+      ///  2. Encrypt the bytes using the chosen algorithm.
+      ///  3. Convert the encrypted bytes to a hex string.
+      ///  4. Display the hex string and the partial outputs.
+      const encryptionFunction = encryptionFunctions[encryptionType] as EncryptDecrypt;
 
-            const bytes = stringToBytes(inputString);
-            const [partialOutputs, encrypted, resolvedKey] = await encryptionFunction(
-                bytes,
-                key,
-                Number.isNaN(nonce) ? 0n : BigInt(nonce),
-            );
+      const bytes = stringToBytes(inputString);
+      const [partialOutputs, encrypted, resolvedKey, keyHash] = await encryptionFunction(
+        bytes,
+        key,
+        Number.isNaN(nonce) ? 0n : BigInt(nonce),
+      );
 
-            processHolder.innerHTML = "";
-            for (let i = 0; i < partialOutputs.length; ++i) {
-                const [title, content] = partialOutputs[i];
-                const processDiv = document.createElement("div");
-                processDiv.classList.add(
-                    "d-flex",
-                    "flex-column",
-                    "p-2",
-                    "mb-3",
-                    "border"
-                );
-                const processSpan = document.createElement("span");
-                processSpan.classList.add("p");
-                processSpan.textContent = title;
+      processHolder.innerHTML = "";
+      for (let i = 0; i < partialOutputs.length; ++i) {
+        const [title, content] = partialOutputs[i];
+        const processDiv = document.createElement("div");
+        processDiv.classList.add(
+          "d-flex",
+          "flex-column",
+          "p-2",
+          "mb-3",
+          "border"
+        );
+        const processSpan = document.createElement("span");
+        processSpan.classList.add("p");
+        processSpan.textContent = title;
 
-                const metadataContent = document.createElement("div");
-                for (const line of content.split("\n")) {
-                    const metadataSpan = document.createElement("div");
-                    metadataSpan.classList.add("p", "text-primary");
-                    metadataSpan.textContent = line;
-                    metadataContent.appendChild(metadataSpan);
-                }
-
-                processDiv.appendChild(processSpan);
-                processDiv.appendChild(metadataContent);
-                processHolder.appendChild(processDiv);
-            }
-
-            // Display the input, key, and output.
-
-            inputResult.textContent = inputString;
-            keyResult.textContent = resolvedKey;
-            outputResult.textContent = encrypted.toString(16);
-
-            inputType.textContent = `(Plaintext)`;
-            outputType.textContent = `(Hexadecimal)`;
-
-            temporaryText = encrypted.toString(16);
-            downloadText.classList.remove("d-none");
-            break;
+        const metadataContent = document.createElement("div");
+        for (const line of content.split("\n")) {
+          const metadataSpan = document.createElement("div");
+          metadataSpan.classList.add("p", "text-primary");
+          metadataSpan.textContent = line;
+          metadataContent.appendChild(metadataSpan);
         }
-        case "decrypt": {
-            /// Since we want to encrypt, we need to do the following steps:
-            ///  1. Convert the input string to bytes.
-            ///  2. Encrypt the bytes using the TwoFish algorithm.
-            ///  3. Convert the encrypted bytes to a hex string.
-            ///  4. Display the hex string and the partial outputs.
-            const decryptionFunction = decryptionFunctions[
-                encryptionType
-            ] as typeof IDEA.encrypt;
 
-            const bytes = BigInt(`0x${inputString}`);
-            const [partialOutputs, encrypted, resolvedKey] = await decryptionFunction(
-                bytes,
-                key,
-                Number.isNaN(nonce) ? 0n : BigInt(nonce),
-            );
+        processDiv.appendChild(processSpan);
+        processDiv.appendChild(metadataContent);
+        processHolder.appendChild(processDiv);
+      }
 
-            processHolder.innerHTML = "";
-            for (let i = 0; i < partialOutputs.length; ++i) {
-                const [title, content] = partialOutputs[i];
-                const processDiv = document.createElement("div");
-                processDiv.classList.add(
-                    "d-flex",
-                    "flex-column",
-                    "p-2",
-                    "mb-3",
-                    "border"
-                );
-                const processSpan = document.createElement("span");
-                processSpan.classList.add("p");
-                processSpan.textContent = title;
+      // Display the input, key, and output.
 
-                const metadataSpan = document.createElement("span");
-                metadataSpan.classList.add("p", "text-primary");
-                metadataSpan.textContent = content;
+      inputResult.textContent = inputString;
+      keyResult.textContent = resolvedKey;
+      keyHashResult.textContent = keyHash.toString(16);
+      outputResult.textContent = encrypted.toString(16);
 
-                processDiv.appendChild(processSpan);
-                processDiv.appendChild(metadataSpan);
-                processHolder.appendChild(processDiv);
-            }
+      inputType.textContent = `(Plaintext)`;
+      outputType.textContent = `(Hexadecimal)`;
 
-            // Display the input, key, and output.
-
-            inputResult.textContent = inputString;
-            keyResult.textContent = resolvedKey;
-            outputResult.textContent = bytesToString(encrypted);
-
-            inputType.textContent = `(Hexadecimal)`;
-            outputType.textContent = `(Plaintext)`;
-
-            temporaryText = encrypted.toString(16);
-            downloadText.classList.remove("d-none");
-            break;
-        }
+      temporaryText = encrypted.toString(16);
+      downloadText.classList.remove("d-none");
+      break;
     }
+    case "decrypt": {
+      /// Since we want to encrypt, we need to do the following steps:
+      ///  1. Convert the input string to bytes.
+      ///  2. Encrypt the bytes using the TwoFish algorithm.
+      ///  3. Convert the encrypted bytes to a hex string.
+      ///  4. Display the hex string and the partial outputs.
+      const decryptionFunction = decryptionFunctions[encryptionType] as EncryptDecrypt;
 
-    console.log(type);
+      const bytes = BigInt(`0x${inputString}`);
+      const [partialOutputs, encrypted, resolvedKey, keyHash] = await decryptionFunction(
+        bytes,
+        key,
+        Number.isNaN(nonce) ? 0n : BigInt(nonce),
+      );
+
+      processHolder.innerHTML = "";
+      for (let i = 0; i < partialOutputs.length; ++i) {
+        const [title, content] = partialOutputs[i];
+        const processDiv = document.createElement("div");
+        processDiv.classList.add(
+          "d-flex",
+          "flex-column",
+          "p-2",
+          "mb-3",
+          "border"
+        );
+        const processSpan = document.createElement("span");
+        processSpan.classList.add("p");
+        processSpan.textContent = title;
+
+        const metadataContent = document.createElement("div");
+        for (const line of content.split("\n")) {
+          const metadataSpan = document.createElement("div");
+          metadataSpan.classList.add("p", "text-primary");
+          metadataSpan.textContent = line;
+          metadataContent.appendChild(metadataSpan);
+        }
+
+        processDiv.appendChild(processSpan);
+        processDiv.appendChild(metadataContent);
+        processHolder.appendChild(processDiv);
+      }
+
+      // Display the input, key, and output.
+
+      inputResult.textContent = inputString;
+      keyResult.textContent = resolvedKey;
+      keyHashResult.textContent = keyHash.toString(16);
+      outputResult.textContent = bytesToString(encrypted);
+
+      inputType.textContent = `(Hexadecimal)`;
+      outputType.textContent = `(Plaintext)`;
+
+      temporaryText = encrypted.toString(16);
+      downloadText.classList.remove("d-none");
+      break;
+    }
+  }
+
+  console.log(type);
 });

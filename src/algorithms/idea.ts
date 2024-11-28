@@ -55,7 +55,7 @@ export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
     encryptedBlocks.push(decryptedBlock);
   }
   const encryptedText = extractBLOBFrom64BitBytes(encryptedBlocks);
-  return [partialOutputs, encryptedText, resolvedKey];
+  return [partialOutputs, encryptedText, resolvedKey, hashedKey];
 };
 
 /**
@@ -92,7 +92,7 @@ export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
 
   const decryptedText = extractBLOBFrom64BitBytes(decryptedBlocks);
 
-  return [partialOutputs, decryptedText, resolvedKey];
+  return [partialOutputs, decryptedText, resolvedKey, hashedKey];
 };
 
 /**
@@ -246,7 +246,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   let [x1, x2, x3, x4] = extractBitsIntoBlocks(block, 16n, 4n);
   partialOutputs.push([
     `Splitting 64-bit block into 4 16-bit blocks`,
-    `${x1}, ${x2}, ${x3}, ${x4}`,
+    `${x1.toString(16)}, ${x2.toString(16)}, ${x3.toString(16)}, ${x4.toString(16)}`,
   ]);
 
   for (let i = 0; i < 8; ++i) {
@@ -285,7 +285,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
 
     partialOutputs.push([
       `Round ${i + 1}`,
-      `${x1}, ${x2}, ${x3}, ${x4}`,
+      `${x1.toString(16)}, ${x2.toString(16)}, ${x3.toString(16)}, ${x4.toString(16)}`,
     ]);
   }
 
@@ -297,7 +297,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   const y4 = multiply(x4, z4);
   partialOutputs.push([
     `Round 8.5`,
-    `${y1}, ${y2}, ${y3}, ${y4}`,
+    `${y1.toString(16)}, ${y2.toString(16)}, ${y3.toString(16)}, ${y4.toString(16)}`,
   ]);
 
   return [partialOutputs, (y1 << 48n) | (y2 << 32n) | (y3 << 16n) | y4];
