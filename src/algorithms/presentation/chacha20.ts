@@ -1,23 +1,21 @@
-import { EncryptDecrypt, hashKeyBySHA256, random128BitKey } from "../utils";
+import { EncryptDecrypt, hashKeyBySHA256 } from "./utils";
 
-export const encrypt: EncryptDecrypt = async (input: bigint, key?: string, nonce?: bigint) => {
-  const resolvedKey = key || random128BitKey();
+export const encrypt: EncryptDecrypt = async (input: bigint, key: string, nonce?: bigint) => {
   const keyBytes = await hashKeyBySHA256(key);
   const messageBytes = extractBytesFromBlob(input);
-  const [partialOutputs, outputStream] = xorKeyStream(messageBytes, keyBytes, nonce);
+  const outputStream = xorKeyStream(messageBytes, keyBytes, nonce!);
   const output = extractBlobFromBytes(outputStream);
 
-  return [partialOutputs, output, resolvedKey];
+  return output;
 };
 
-export const decrypt: EncryptDecrypt = async (input: bigint, key?: string, nonce?: bigint) => {
-  const resolvedKey = key || random128BitKey();
+export const decrypt: EncryptDecrypt = async (input: bigint, key: string, nonce?: bigint) => {
   const keyBytes = await hashKeyBySHA256(key);
   const messageBytes = extractBytesFromBlob(input);
-  const [partialOutputs, outputStream] = xorKeyStream(messageBytes, keyBytes, nonce);
+  const outputStream = xorKeyStream(messageBytes, keyBytes, nonce!);
   const output = extractBlobFromBytes(outputStream);
 
-  return [partialOutputs, output, resolvedKey];
+  return output;
 }
 
 type ChaCha20State = [
@@ -104,14 +102,7 @@ const words = (value: bigint, count?: number): bigint[] => {
  * @param nonce 96-bit integer
  * @param count 32-bit block integer
  */
-const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
-  [[title: string, content: string][], bigint[]] => {
-  const partialOutputs: [title: string, content: string][] = [];
-  partialOutputs.push([
-    `Block ${count} Generation`,
-    ``,
-  ]);
-
+const chaChaBlock = (key: bigint, nonce: bigint, count: bigint): bigint[] => {
   const state = [
     0x61707865n, 0x3320646en, 0x79622d32n, 0x6b206574n,
     ...words(key, 8),
@@ -134,15 +125,8 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
   }
 
   const output = addState(state, stateCopy);
-  partialOutputs.push([
-    `Key Stream ${count}`,
-    output//
-      .flatMap((p) => extractBytesFromBlob(p).reverse())
-      .map((word) => "0x" + word.toString(16).padStart(2, "0"))
-      .join(" "),
-  ]);
 
-  return [partialOutputs, output];
+  return output;
 };
 
 /**
@@ -151,15 +135,14 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
  * @param key the input key
  * @param nonce the input once value.
  */
-const keyStream = function* (key: bigint, nonce: bigint):
-  Generator<[iteration: bigint, [title: string, content: string][], bigint]> {
+const keyStream = function* (key: bigint, nonce: bigint): Generator<bigint> {
   for (let i = 1n; ; ++i) {
-    const [partialOutput, block] = chaChaBlock(key, nonce, i);
+    const block = chaChaBlock(key, nonce, i);
 
     for (const word of block) {
       for (let byte of words(word, 4)) {
         while (byte > 0) {
-          yield [i, partialOutput, byte & 0xFFn];
+          yield byte & 0xFFn;
           byte >>= 8n;
         }
       }
@@ -174,48 +157,18 @@ const keyStream = function* (key: bigint, nonce: bigint):
  * @param nonce the input nonce
  * @returns the bytes xor'd with the key stream.
  */
-const xorKeyStream = (input: bigint[], key: bigint, nonce: bigint):
-  [[title: string, content: string][], bigint[]] => {
+const xorKeyStream = (input: bigint[], key: bigint, nonce: bigint): bigint[] => {
   const output: bigint[] = [];
   const keyGen = keyStream(key, nonce);
 
-  let lastIteration: bigint | null = null;
-  const partialOutputs: [title: string, content: string][] = [];
-
-  const inputDisplayBuffer: string[] = [];
-  const outputDisplayBuffer: string[] = [];
-
   for (const byte of input) {
-    const [blockIteration, partialOutput, keyByte] = keyGen.next().value as
-      [iteration: bigint, partialOutputs: [title: string, content: string][], byte: bigint];
-
-    if (lastIteration !== blockIteration) {
-      lastIteration = blockIteration;
-
-      partialOutputs.push(...partialOutput);
-
-      if (inputDisplayBuffer.length > 0) {
-        partialOutputs.push(["Input Bytes", inputDisplayBuffer.join(" ")]);
-        partialOutputs.push(["Output Bytes", outputDisplayBuffer.join(" ")]);
-
-        inputDisplayBuffer.splice(0, inputDisplayBuffer.length);
-        outputDisplayBuffer.splice(0, outputDisplayBuffer.length);
-      }
-    }
+    const keyByte = keyGen.next().value as bigint;
 
     const result = byte ^ keyByte;
     output.push(result);
-
-    inputDisplayBuffer.push("0x" + byte.toString(16).padStart(2, "0"));
-    outputDisplayBuffer.push("0x" + result.toString(16).padStart(2, "0"));
   }
 
-  if (inputDisplayBuffer.length > 0) {
-    partialOutputs.push(["Input Bytes", inputDisplayBuffer.join(" ")]);
-    partialOutputs.push(["Output Bytes", outputDisplayBuffer.join(" ")]);
-  }
-
-  return [partialOutputs, output];
+  return output;
 }
 
 /**
