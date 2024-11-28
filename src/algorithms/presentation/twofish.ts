@@ -96,7 +96,7 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
   const M: bigint[] = new Array(2 * k).fill(0n);
   for (let i = 0; i <= 2 * k - 1; ++i) {
     for (let j = 0; j <= 3; ++j) {
-      M[i] += m[4 * i + j] * (2n ** BigInt(8 * j));
+      M[i] += m[4 * i + j] << BigInt(8 * j);
     }
   }
 
@@ -123,7 +123,7 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
     const B = ROL(H((2n * i + 1n) * rho, mOdd), 8n);
 
     const K2i = (A + B) & BIT_32;
-    const K2i1 = ROL(A + 2n * B, 9n);
+    const K2i1 = ROL((A + 2n * B) & BIT_32, 9n);
 
     keys.push(K2i);
     keys.push(K2i1);
@@ -414,7 +414,7 @@ const _qSubstitute = (block: bigint, tables: bigint[][]): bigint => {
   const t3 = (x: bigint): bigint => tables[3][Number(x)];
 
   let [a, b] = [block / 16n, block % 16n];
-  [a, b] = [a ^ b, ((a ^ ROR4(b, 1n) ^ 8n * a)) % 16n];
+  [a, b] = [a ^ b, (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
   [a, b] = [t0(a), t1(b)];
   [a, b] = [a ^ b, (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
   [a, b] = [t2(a), t3(b)];

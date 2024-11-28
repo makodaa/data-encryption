@@ -48,7 +48,9 @@ form.selectEncryption.addEventListener("change", () => {
 
 fileInput.addEventListener("change", (e: Event) => {
   const file = (e.target as HTMLInputElement).files[0];
-  if (file && file.type === "text/plain") {
+  const type = form.selectProcess.value;
+
+  if (file && file.type === "text/plain" && type === "encrypt") {
     const reader = new FileReader();
 
     reader.onload = function (e) {
@@ -58,22 +60,57 @@ fileInput.addEventListener("change", (e: Event) => {
     };
 
     reader.readAsText(file);
+  } else if (file && file.type === "text/plain" && type === "decrypt") {
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+      const content = e.target.result;
+      const bytes = [...new Uint8Array(content as ArrayBuffer)];
+      const aggregate = bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+      (document.getElementById("inputString") as HTMLInputElement).value =
+        aggregate as string;
+    };
+
+    reader.readAsArrayBuffer(file);
   } else {
     alert("Please upload a valid text file.");
   }
 });
 
 downloadText.addEventListener("click", () => {
-  console.log("hello?");
-  const blob = new Blob([temporaryText], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
+  const type = form.selectProcess.value;
 
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "output.txt";
+  if (type === "decrypt") {
+    const blob = new Blob([temporaryText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
 
-  link.click();
-  URL.revokeObjectURL(url);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "output.txt";
+
+    link.click();
+    URL.revokeObjectURL(url);
+  } else {
+    // I want a pure blob.
+
+    const bytes = [];
+    let aggregate = BigInt(`0x${outputResult.textContent}`);
+    while (aggregate > 0) {
+      bytes.unshift(Number(aggregate & 0xffn));
+      aggregate >>= 8n;
+    }
+    const array = Uint8Array.from(bytes);
+    const blob = new Blob([array]);
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "output.txt";
+
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 });
 
 runAlgorithmButton.addEventListener("click", async () => {
