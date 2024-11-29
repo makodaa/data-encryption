@@ -2,6 +2,43 @@ import { EncryptDecrypt, hashKeyBySHA256 } from "./utils";
 
 const BIT_128 = (1n << 128n) - 1n;
 const BIT_32 = (1n << 32n) - 1n;
+const k = 2;
+const MATRIX = {
+  mds: [
+    [0x01n, 0xEFn, 0x5Bn, 0x5Bn],
+    [0x5Bn, 0xEFn, 0xEFn, 0x01n],
+    [0xEFn, 0x5Bn, 0x01n, 0xEFn],
+    [0xEFn, 0x01n, 0xEFn, 0x5Bn],
+  ],
+  rs: [
+    [0x01n, 0xA4n, 0x55n, 0x87n, 0x5An, 0x58n, 0xDBn, 0x9En],
+    [0xA4n, 0x56n, 0x82n, 0xF3n, 0x1En, 0xC6n, 0x68n, 0xE5n],
+    [0x02n, 0xA1n, 0xFCn, 0xC1n, 0x47n, 0xAEn, 0x3Dn, 0x19n],
+    [0xA4n, 0x55n, 0x87n, 0x5An, 0x58n, 0xDBn, 0x9En, 0x03n],
+  ],
+};
+const SUBSTITUTION = {
+  q0: {
+    t0: [0x8n, 0x1n, 0x7n, 0xDn, 0x6n, 0xFn, 0x3n, 0x2n,
+         0x0n, 0xBn, 0x5n, 0x9n, 0xEn, 0xCn, 0xAn, 0x4n],
+    t1: [0xEn, 0xCn, 0xBn, 0x8n, 0x1n, 0x2n, 0x3n, 0x5n,
+         0xFn, 0x4n, 0xAn, 0x6n, 0x7n, 0x0n, 0x9n, 0xDn],
+    t2: [0xBn, 0xAn, 0x5n, 0xEn, 0x6n, 0xDn, 0x9n, 0x0n,
+         0xCn, 0x8n, 0xFn, 0x3n, 0x2n, 0x4n, 0x7n, 0x1n],
+    t3: [0xDn, 0x7n, 0xFn, 0x4n, 0x1n, 0x2n, 0x6n, 0xEn,
+         0x9n, 0xBn, 0x3n, 0x0n, 0x8n, 0x5n, 0xCn, 0xAn],
+  },
+  q1: {
+    t0: [0x2n, 0x8n, 0xBn, 0xDn, 0xFn, 0x7n, 0x6n, 0xEn,
+         0x3n, 0x1n, 0x9n, 0x4n, 0x0n, 0xAn, 0xCn, 0x5n],
+    t1: [0x1n, 0xEn, 0x2n, 0xBn, 0x4n, 0xCn, 0x3n, 0x7n,
+         0x6n, 0xDn, 0xAn, 0x5n, 0xFn, 0x9n, 0x0n, 0x8n],
+    t2: [0x4n, 0xCn, 0x7n, 0x5n, 0x1n, 0x6n, 0x9n, 0xAn,
+         0x0n, 0xEn, 0xDn, 0x8n, 0x2n, 0xBn, 0x3n, 0xFn],
+    t3: [0xBn, 0x9n, 0x5n, 0x1n, 0xCn, 0x3n, 0xDn, 0xEn,
+         0x6n, 0x4n, 0x7n, 0xFn, 0x2n, 0x0n, 0x8n, 0xAn],
+  },
+};
 
 export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
   /// Key resolution
@@ -23,44 +60,6 @@ export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
   const output = extractBLOBFrom128BitBytes(decryptedBlocks);
 
   return output;
-};
-
-const k = 2; // 128 / 64
-const MATRIX = {
-  mds: [
-    [0x01n, 0xEFn, 0x5Bn, 0x5Bn],
-    [0x5Bn, 0xEFn, 0xEFn, 0x01n],
-    [0xEFn, 0x5Bn, 0x01n, 0xEFn],
-    [0xEFn, 0x01n, 0xEFn, 0x5Bn],
-  ],
-  rs: [
-    [0x01n, 0xA4n, 0x55n, 0x87n, 0x5An, 0x58n, 0xDBn, 0x9En],
-    [0xA4n, 0x56n, 0x82n, 0xF3n, 0x1En, 0xC6n, 0x68n, 0xE5n],
-    [0x02n, 0xA1n, 0xFCn, 0xC1n, 0x47n, 0xAEn, 0x3Dn, 0x19n],
-    [0xA4n, 0x55n, 0x87n, 0x5An, 0x58n, 0xDBn, 0x9En, 0x03n],
-  ],
-};
-const SUBSTITUTION = {
-  q0: {
-    t0: [0x8n, 0x1n, 0x7n, 0xDn, 0x6n, 0xFn, 0x3n, 0x2n,
-      0x0n, 0xBn, 0x5n, 0x9n, 0xEn, 0xCn, 0xAn, 0x4n],
-    t1: [0xEn, 0xCn, 0xBn, 0x8n, 0x1n, 0x2n, 0x3n, 0x5n,
-      0xFn, 0x4n, 0xAn, 0x6n, 0x7n, 0x0n, 0x9n, 0xDn],
-    t2: [0xBn, 0xAn, 0x5n, 0xEn, 0x6n, 0xDn, 0x9n, 0x0n,
-      0xCn, 0x8n, 0xFn, 0x3n, 0x2n, 0x4n, 0x7n, 0x1n],
-    t3: [0xDn, 0x7n, 0xFn, 0x4n, 0x1n, 0x2n, 0x6n, 0xEn,
-      0x9n, 0xBn, 0x3n, 0x0n, 0x8n, 0x5n, 0xCn, 0xAn],
-  },
-  q1: {
-    t0: [0x2n, 0x8n, 0xBn, 0xDn, 0xFn, 0x7n, 0x6n, 0xEn,
-      0x3n, 0x1n, 0x9n, 0x4n, 0x0n, 0xAn, 0xCn, 0x5n],
-    t1: [0x1n, 0xEn, 0x2n, 0xBn, 0x4n, 0xCn, 0x3n, 0x7n,
-      0x6n, 0xDn, 0xAn, 0x5n, 0xFn, 0x9n, 0x0n, 0x8n],
-    t2: [0x4n, 0xCn, 0x7n, 0x5n, 0x1n, 0x6n, 0x9n, 0xAn,
-      0x0n, 0xEn, 0xDn, 0x8n, 0x2n, 0xBn, 0x3n, 0xFn],
-    t3: [0xBn, 0x9n, 0x5n, 0x1n, 0xCn, 0x3n, 0xDn, 0xEn,
-      0x6n, 0x4n, 0x7n, 0xFn, 0x2n, 0x0n, 0x8n, 0xAn],
-  },
 };
 
 /**
@@ -85,14 +84,7 @@ type KeySchedule = [K: bigint[], S: bigint[]];
  * @returns the computed key schedule
  */
 const generateKeySchedule = (key: bigint): KeySchedule => {
-  /// The key consists of 8k bytes from m[0] to m[8*k - 1].
-  ///   The bytes are converted into 2k words of 32 bits each.
-
-  const m: bigint[] = new Array(8 * k).fill(0n);
-  for (let i = 0; i < 8 * k; ++i) {
-    m[8 * k - 1 - i] = (key >> BigInt(8 * i)) & 0xFFn;
-  }
-
+  const m: bigint[] = extractBytesFromBlob(key, 16n);
   const M: bigint[] = new Array(2 * k).fill(0n);
   for (let i = 0; i <= 2 * k - 1; ++i) {
     for (let j = 0; j <= 3; ++j) {
@@ -107,14 +99,13 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
     mOdd.push(M[i + 1]);
   }
 
-  const S = new Array<bigint>(k).fill(0n);
+  const S: bigint[] = [];
   const vectors = groupData(m, 8);
   for (let i = 0; i < k; ++i) {
     const si = rs(vectors[i]);
 
-    S[i] = si[0] | (si[1] << 8n) | (si[2] << 16n) | (si[3] << 24n);
+    S.unshift(si[0] | (si[1] << 8n) | (si[2] << 16n) | (si[3] << 24n));
   }
-  S.reverse();
 
   const rho = 0x1010101n;
   const keys: bigint[] = [];
@@ -132,10 +123,7 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
   return [keys, S];
 };
 
-type EncryptDecryptBlock = (
-  block: bigint,
-  keySchedule: KeySchedule,
-) => bigint;
+type EncryptDecryptBlock = (block: bigint, keySchedule: KeySchedule) => bigint;
 
 /**
  * Encrypts a block of data using the TwoFish algorithm.
@@ -148,15 +136,17 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   let [r0, r1, r2, r3] = littleEndianConversion(bytes);
   [r0, r1, r2, r3] = inputWhiten([r0, r1, r2, r3], keySchedule);
 
-  /// In each of the 16 rounds, the first two words are used as the input to the function F,
-  ///   which also takes the round number as input. The third word is XOR'd with the first output
-  ///   of F, and then rotated by left.
   for (let r = 0; r < 16; ++r) {
     const [f0, f1] = F(r0, r1, r, keySchedule);
-    [r0, r1, r2, r3] = [ROR(r2 ^ f0, 1n), ROL(r3, 1n) ^ f1, r0, r1];
+
+    // Apply the feistel transformation, and rotate the words.
+    [r0, r1, r2, r3] = [r0, r1, ROR(r2 ^ f0, 1n), ROL(r3, 1n) ^ f1];
+    [r0, r1, r2, r3] = [r2, r3, r0, r1];
   }
 
-  [r0, r1, r2, r3] = outputWhiten([r2, r3, r0, r1], keySchedule);
+  /// Undo the last swap for the final round.
+  [r0, r1, r2, r3] = [r2, r3, r0, r1];
+  [r0, r1, r2, r3] = outputWhiten([r0, r1, r2, r3], keySchedule);
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
   let output = 0n;
@@ -178,15 +168,17 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   let [r0, r1, r2, r3] = littleEndianConversion(bytes);
   [r0, r1, r2, r3] = outputWhiten([r0, r1, r2, r3], keySchedule);
 
-  /// In each of the 16 rounds, the first two words are used as the input to the function F,
-  ///   which also takes the round number as input. The third word is XOR'd with the first output
-  ///   of F, and then rotated by left.
   for (let r = 15; r >= 0; --r) {
     const [f0, f1] = F(r0, r1, r, keySchedule);
-    [r0, r1, r2, r3] = [ROL(r2, 1n) ^ f0, ROR(r3 ^ f1, 1n), r0, r1];
+
+    // Apply the reverse feistel transformation, and rotate the words.
+    [r0, r1, r2, r3] = [r0, r1, ROL(r2, 1n) ^ f0, ROR(r3 ^ f1, 1n)];
+    [r0, r1, r2, r3] = [r2, r3, r0, r1];
   }
 
-  [r0, r1, r2, r3] = inputWhiten([r2, r3, r0, r1], keySchedule);
+  /// Undo the last swap for the final round.
+  [r0, r1, r2, r3] = [r2, r3, r0, r1];
+  [r0, r1, r2, r3] = inputWhiten([r0, r1, r2, r3], keySchedule);
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
 
   let output = 0n;
@@ -219,12 +211,10 @@ const extractBytesFromBlob = (blob: bigint, count?: bigint): bigint[] => {
  * @returns the 32-bit blocks of the 128-bit block
  */
 const littleEndianConversion = (p: bigint[]): bigint[] => {
-  const P = new Array(4)//
-    .fill(0n)//
-    .map((_, i) => p[4 * i] | //
-      (p[4 * i + 1] << 8n) | //
-      (p[4 * i + 2] << 16n) | //
-      (p[4 * i + 3] << 24n));
+  const P: bigint[] = [];
+  for (let i = 0; i < 4; ++i) {
+    P.push(p[4 * i] | (p[4 * i + 1] << 8n) | (p[4 * i + 2] << 16n) | (p[4 * i + 3] << 24n));
+  }
 
   return P;
 };
@@ -362,7 +352,7 @@ const F = (r0: bigint, r1: bigint, round: number, [K, S]: KeySchedule): [bigint,
   const t0 = H(r0, S);
   const t1 = H(ROL(r1, 8n), S);
 
-  const f0 = (t0 + t1 + K[2 * round + 8]) & 0xFFn;
+  const f0 = (t0 + t1      + K[2 * round + 8]) & 0xFFn;
   const f1 = (t0 + 2n * t1 + K[2 * round + 9]) & 0xFFn;
 
   return [f0, f1];
@@ -378,23 +368,16 @@ const F = (r0: bigint, r1: bigint, round: number, [K, S]: KeySchedule): [bigint,
  */
 const H = (X: bigint, L: bigint[]): bigint => {
   /// [x] and [l] are byte-separations of [X] and [L] respectively.
-  const x: bigint[] = [];
-  const l: bigint[][] = [];
-  for (let j = 0; j < 4; ++j) {
-    x[j] = (X >> BigInt(8 * j)) & 0xFFn;
+  const x = bytesOfSingle(X, 4);
+  const l = bytesOfGroup(L, 4);
 
-    for (let i = 0; i <= k - 1; ++i) {
-      l[i] ??= [];
-      l[i][j] = (L[i] >> BigInt(8 * j)) & 0xFFn;
-    }
-  }
-
-  let [y0, y1, y2, y3] = [x[0], x[1], x[2], x[3]];
-  [y0, y1, y2, y3] = [q0(y0), q1(y1), q0(y2), q1(y3)];
+  let y0: bigint, y1: bigint, y2: bigint, y3: bigint;
+  [y0, y1, y2, y3] = [x[0]        ,   x[1]      , x[2]        , x[3]];
+  [y0, y1, y2, y3] = [q0(y0)      , q1(y1)      , q0(y2)      , q1(y3)];
   [y0, y1, y2, y3] = [y0 ^ l[1][0], y1 ^ l[1][1], y2 ^ l[1][2], y3 ^ l[1][3]];
-  [y0, y1, y2, y3] = [q0(y0), q0(y1), q1(y2), q1(y3)];
+  [y0, y1, y2, y3] = [q0(y0)      , q0(y1)      , q1(y2)      , q1(y3)];
   [y0, y1, y2, y3] = [y0 ^ l[0][0], y1 ^ l[0][1], y2 ^ l[0][2], y3 ^ l[0][3]];
-  [y0, y1, y2, y3] = [q1(y0), q0(y1), q1(y2), q0(y3)];
+  [y0, y1, y2, y3] = [q1(y0)      , q0(y1)      , q1(y2)      , q0(y3)];
   const [z0, z1, z2, z3] = mds([y0, y1, y2, y3]);
 
   return z0 | (z1 << 8n) | (z2 << 16n) | (z3 << 24n);
@@ -413,11 +396,12 @@ const _qSubstitute = (block: bigint, tables: bigint[][]): bigint => {
   const t2 = (x: bigint): bigint => tables[2][Number(x)];
   const t3 = (x: bigint): bigint => tables[3][Number(x)];
 
-  let [a, b] = [block / 16n, block % 16n];
-  [a, b] = [a ^ b, (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
-  [a, b] = [t0(a), t1(b)];
-  [a, b] = [a ^ b, (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
-  [a, b] = [t2(a), t3(b)];
+  let a: bigint, b: bigint;
+  [a, b] = [block / 16n, block % 16n];
+  [a, b] = [a ^ b      , (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
+  [a, b] = [t0(a)      , t1(b)];
+  [a, b] = [a ^ b      , (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
+  [a, b] = [t2(a)      , t3(b)];
 
   return 16n * b + a;
 };
@@ -534,3 +518,23 @@ const groupData = <T>(data: T[], groupSize: number): T[][] => {
 
   return output;
 }
+
+const bytesOfSingle = (block: bigint, count: number): bigint[] => {
+  const bytes: bigint[] = [];
+
+  while (block > 0 || bytes.length < count) {
+    bytes.push(block & 0xFFn);
+    block >>= 8n;
+  }
+
+  return bytes;
+}
+
+const bytesOfGroup = (blocks: bigint[], count: number): bigint[][] => {
+  const bytes: bigint[][] = [];
+  for (const block of blocks) {
+    bytes.push(bytesOfSingle(block, count));
+  }
+
+  return bytes;
+};

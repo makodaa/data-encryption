@@ -1,4 +1,4 @@
-import { EncryptDecrypt, hashKeyBySHA256, random128BitKey } from "../utils";
+import { EncryptDecrypt, hashKeyBySHA256, PartialOutputs, random128BitKey } from "../utils";
 
 
 const BIT_128 = (1n << 128n) - 1n;
@@ -6,26 +6,32 @@ const BIT_32 = (1n << 32n) - 1n;
 
 export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
   const encryptedBlocks: bigint[] = [];
-  const partialOutputs: [title: string, content: string][] = [];
+  const partialOutputs: PartialOutputs = [];
 
   /// Key resolution
   const resolvedKey = key || random128BitKey();
   const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
 
-  const keySchedule = generateKeySchedule(hashedKey);
+  const [schedulePartialOutputs, keySchedule] = generateKeySchedule(hashedKey);
+  partialOutputs.push(...schedulePartialOutputs);
+  console.log(schedulePartialOutputs);
+
   const blocks = extract128BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((block) => encryptBlock(block, keySchedule));
 
+  partialOutputs.push(["Encryption Proper", ""]);
+
   /// Extract the partial outputs and the encrypted blocks.
-  for (const [partialOutput, decryptedBlock] of outputs) {
+  const initialLength = partialOutputs.length;
+  for (const [partialOutput, encryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      if (partialOutputs[i] == null) {
-        partialOutputs[i] = partialOutput[i];
+      if (partialOutputs[initialLength + i] == null) {
+        partialOutputs[initialLength + i] = partialOutput[i];
       } else {
-        partialOutputs[i][1] += "\n " + partialOutput[i][1];
+        partialOutputs[initialLength + i][1] += "\n " + partialOutput[i][1];
       }
     }
-    encryptedBlocks.push(decryptedBlock);
+    encryptedBlocks.push(encryptedBlock);
   }
 
   const output = extractBLOBFrom128BitBytes(encryptedBlocks);
@@ -35,23 +41,27 @@ export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
 
 export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
   const decryptedBlocks: bigint[] = [];
-  const partialOutputs: [title: string, content: string][] = [];
+  const partialOutputs: PartialOutputs = [];
 
   /// Key resolution
   const resolvedKey = key || random128BitKey();
   const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
 
-  const keySchedule = generateKeySchedule(hashedKey);
+  const [schedulePartialOutputs, keySchedule] = generateKeySchedule(hashedKey);
+  partialOutputs.push(...schedulePartialOutputs);
+
   const blocks = extract128BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((block) => decryptBlock(block, keySchedule));
+  partialOutputs.push(["Decryption Proper", ""]);
 
   /// Extract the partial outputs and the decrypted blocks.
+  const initialLength = partialOutputs.length;
   for (const [partialOutput, decryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      if (partialOutputs[i] == null) {
-        partialOutputs[i] = partialOutput[i];
+      if (partialOutputs[initialLength + i] == null) {
+        partialOutputs[initialLength + i] = partialOutput[i];
       } else {
-        partialOutputs[i][1] += "\n" + partialOutput[i][1];
+        partialOutputs[initialLength + i][1] += "\n " + partialOutput[i][1];
       }
     }
     decryptedBlocks.push(decryptedBlock);
@@ -120,14 +130,18 @@ type KeySchedule = [K: bigint[], S: bigint[]];
  * @param key The main key to generate the key schedule from
  * @returns the computed key schedule
  */
-const generateKeySchedule = (key: bigint): KeySchedule => {
+const generateKeySchedule = (key: bigint): [PartialOutputs, KeySchedule] => {
   /// The key consists of 8k bytes from m[0] to m[8*k - 1].
   ///   The bytes are converted into 2k words of 32 bits each.
 
-  const m: bigint[] = new Array(8 * k).fill(0n);
-  for (let i = 0; i < 8 * k; ++i) {
-    m[8 * k - 1 - i] = (key >> BigInt(8 * i)) & 0xFFn;
-  }
+  const partialOutputs: PartialOutputs = [];
+  partialOutputs.push(["Generation of Key Schedule", ""]);
+
+  const m: bigint[] = extractBytesFromBlob(key, 16n);
+  partialOutputs.push([
+    "Separation of Key into bytes",
+    m.map((byte) => byte.toString(16).padStart(2, "0")).join(", "),
+  ]);
 
   const M: bigint[] = new Array(2 * k).fill(0n);
   for (let i = 0; i <= 2 * k - 1; ++i) {
@@ -135,6 +149,10 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
       M[i] += m[4 * i + j] << BigInt(8 * j);
     }
   }
+  partialOutputs.push([
+    "Conversion of bytes to 32-bit words",
+    M.map((word) => word.toString(16).padStart(8, "0")).join(", "),
+  ]);
 
   const mEven: bigint[] = [];
   const mOdd: bigint[] = [];
@@ -142,15 +160,23 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
     mEven.push(M[i]);
     mOdd.push(M[i + 1]);
   }
+  partialOutputs.push([
+    "Separation of 32-bit words into even and odd words",
+    "M[even]: " + mEven.map((word) => word.toString(16).padStart(8, "0")).join(", ") + "\n" +
+    "M[odd]: "  +  mOdd.map((word) => word.toString(16).padStart(8, "0")).join(", "),
+  ]);
 
-  const S = new Array<bigint>(k).fill(0n);
+  const S: bigint[] = [];
   const vectors = groupData(m, 8);
   for (let i = 0; i < k; ++i) {
     const si = rs(vectors[i]);
 
-    S[i] = si[0] | (si[1] << 8n) | (si[2] << 16n) | (si[3] << 24n);
+    S.unshift(si[0] | (si[1] << 8n) | (si[2] << 16n) | (si[3] << 24n));
   }
-  S.reverse();
+  partialOutputs.push([
+    "Generation of S-boxes",
+    S.map((word) => word.toString(16).padStart(8, "0")).join(", "),
+  ]);
 
   const rho = 0x1010101n;
   const keys: bigint[] = [];
@@ -165,13 +191,18 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
     keys.push(K2i1);
   }
 
-  return [keys, S];
+  partialOutputs.push([
+    "Generation of Subkeys",
+    keys.map((word) => word.toString(16).padStart(8, "0")).join(", "),
+  ]);
+
+  return [partialOutputs, [keys, S]];
 };
 
 type EncryptDecryptBlock = (
   block: bigint,
   keySchedule: KeySchedule,
-) => [[title: string, content: string][], bigint];
+) => [PartialOutputs, bigint];
 
 /**
  * Encrypts a block of data using the TwoFish algorithm.
@@ -180,8 +211,7 @@ type EncryptDecryptBlock = (
  * @returns The encrypted block of 128-bit data.
  */
 const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [title: string, content: string][] = [];
-
+  const partialOutputs: PartialOutputs = [];
 
   const bytes = extractBytesFromBlob(block, 16n);
   let [r0, r1, r2, r3] = littleEndianConversion(bytes);
@@ -232,7 +262,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
  * @returns The decrypted block of 128-bit data.
  */
 const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [title: string, content: string][] = [];
+  const partialOutputs: PartialOutputs = [];
 
   const bytes = extractBytesFromBlob(block, 16n);
   let [r0, r1, r2, r3] = littleEndianConversion(bytes);
@@ -316,7 +346,7 @@ const littleEndianConversion = (p: bigint[]): bigint[] => {
 const inverseLittleEndianConversion = (C: bigint[]): bigint[] => {
   const c = new Array(16)//
     .fill(0)
-    .map((_, i) => (C[~~(i / 4)] >> BigInt(8 * (i % 4))) & 0xFFn);
+    .map((_, i) => (C[Math.floor(i / 4)] >> BigInt(8 * (i % 4))) & 0xFFn);
 
   return c;
 }
@@ -456,23 +486,16 @@ const F = (r0: bigint, r1: bigint, round: number, [K, S]: KeySchedule): [bigint,
  */
 const H = (X: bigint, L: bigint[]): bigint => {
   /// [x] and [l] are byte-separations of [X] and [L] respectively.
-  const x: bigint[] = [];
-  const l: bigint[][] = [];
-  for (let j = 0; j < 4; ++j) {
-    x[j] = (X >> BigInt(8 * j)) & 0xFFn;
+  const x = bytesOfSingle(X, 4);
+  const l = bytesOfGroup(L, 4);
 
-    for (let i = 0; i <= k - 1; ++i) {
-      l[i] ??= [];
-      l[i][j] = (L[i] >> BigInt(8 * j)) & 0xFFn;
-    }
-  }
-
-  let [y0, y1, y2, y3] = [x[0], x[1], x[2], x[3]];
-  [y0, y1, y2, y3] = [q0(y0), q1(y1), q0(y2), q1(y3)];
+  let y0: bigint, y1: bigint, y2: bigint, y3: bigint;
+  [y0, y1, y2, y3] = [x[0]        ,   x[1]      , x[2]        , x[3]];
+  [y0, y1, y2, y3] = [q0(y0)      , q1(y1)      , q0(y2)      , q1(y3)];
   [y0, y1, y2, y3] = [y0 ^ l[1][0], y1 ^ l[1][1], y2 ^ l[1][2], y3 ^ l[1][3]];
-  [y0, y1, y2, y3] = [q0(y0), q0(y1), q1(y2), q1(y3)];
+  [y0, y1, y2, y3] = [q0(y0)      , q0(y1)      , q1(y2)      , q1(y3)];
   [y0, y1, y2, y3] = [y0 ^ l[0][0], y1 ^ l[0][1], y2 ^ l[0][2], y3 ^ l[0][3]];
-  [y0, y1, y2, y3] = [q1(y0), q0(y1), q1(y2), q0(y3)];
+  [y0, y1, y2, y3] = [q1(y0)      , q0(y1)      , q1(y2)      , q0(y3)];
   const [z0, z1, z2, z3] = mds([y0, y1, y2, y3]);
 
   return z0 | (z1 << 8n) | (z2 << 16n) | (z3 << 24n);
@@ -491,11 +514,12 @@ const _qSubstitute = (block: bigint, tables: bigint[][]): bigint => {
   const t2 = (x: bigint): bigint => tables[2][Number(x)];
   const t3 = (x: bigint): bigint => tables[3][Number(x)];
 
-  let [a, b] = [block / 16n, block % 16n];
-  [a, b] = [a ^ b, (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
-  [a, b] = [t0(a), t1(b)];
-  [a, b] = [a ^ b, (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
-  [a, b] = [t2(a), t3(b)];
+  let a: bigint, b: bigint;
+  [a, b] = [block / 16n, block % 16n];
+  [a, b] = [a ^ b      , (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
+  [a, b] = [t0(a)      , t1(b)];
+  [a, b] = [a ^ b      , (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
+  [a, b] = [t2(a)      , t3(b)];
 
   return 16n * b + a;
 };
@@ -612,3 +636,23 @@ const groupData = <T>(data: T[], groupSize: number): T[][] => {
 
   return output;
 }
+
+const bytesOfSingle = (block: bigint, count: number): bigint[] => {
+  const bytes: bigint[] = [];
+
+  while (block > 0 || bytes.length < count) {
+    bytes.push(block & 0xFFn);
+    block >>= 8n;
+  }
+
+  return bytes;
+}
+
+const bytesOfGroup = (blocks: bigint[], count: number): bigint[][] => {
+  const bytes: bigint[][] = [];
+  for (const block of blocks) {
+    bytes.push(bytesOfSingle(block, count));
+  }
+
+  return bytes;
+};

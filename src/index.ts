@@ -161,11 +161,15 @@ runAlgorithmButton.addEventListener("click", async () => {
         processSpan.textContent = title;
 
         const metadataContent = document.createElement("div");
-        for (const line of content.split("\n")) {
-          const metadataSpan = document.createElement("div");
-          metadataSpan.classList.add("p", "text-primary");
-          metadataSpan.textContent = line;
-          metadataContent.appendChild(metadataSpan);
+        if (content != null && content.length > 0) {
+          for (const line of content.split("\n")) {
+            const metadataSpan = document.createElement("div");
+            metadataSpan.classList.add("p", "text-primary");
+            metadataSpan.textContent = line;
+            metadataContent.appendChild(metadataSpan);
+          }
+        } else {
+          processSpan.style.fontWeight = "bold";
         }
 
         processDiv.appendChild(processSpan);
@@ -228,11 +232,15 @@ runAlgorithmButton.addEventListener("click", async () => {
         processSpan.textContent = title;
 
         const metadataContent = document.createElement("div");
-        for (const line of content.split("\n")) {
-          const metadataSpan = document.createElement("div");
-          metadataSpan.classList.add("p", "text-primary");
-          metadataSpan.textContent = line;
-          metadataContent.appendChild(metadataSpan);
+        if (content != null && content.length > 0) {
+          for (const line of content.split("\n")) {
+            const metadataSpan = document.createElement("div");
+            metadataSpan.classList.add("p", "text-primary");
+            metadataSpan.textContent = line;
+            metadataContent.appendChild(metadataSpan);
+          }
+        } else {
+          processSpan.style.fontWeight = "bold";
         }
 
         processDiv.appendChild(processSpan);

@@ -116,12 +116,15 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
     ``,
   ]);
 
+  const keyWords = words(key, 8);
+  const nonceWords = words(nonce, 3);
   const state = [
     0x61707865n, 0x3320646en, 0x79622d32n, 0x6b206574n,
-    ...words(key, 8),
-    count, ...words(nonce, 3),
+    keyWords[0], keyWords[1], keyWords[2], keyWords[3],
+    keyWords[4], keyWords[5], keyWords[6], keyWords[7],
+    count, nonceWords[0], nonceWords[1], nonceWords[2],
   ] as ChaCha20State;
-  const stateCopy: ChaCha20State = [...state];
+  const stateCopy = [...state] as ChaCha20State;
 
   for (let i = 0; i < 20; i += 2) {
     // Odd round
