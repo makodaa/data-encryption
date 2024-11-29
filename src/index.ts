@@ -3,24 +3,11 @@ import * as IDEA from "./algorithms/idea";
 import * as TwoFish from "./algorithms/twofish";
 import { bytesToString, EncryptDecrypt, stringToBytes } from "./utils";
 
-console.log("Hello World!");
-
-// const bytes = stringToBytes(
-//   "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi."
-// );
-// {
-//   const [[], encrypted, key] = TwoFish.encrypt(bytes);
-//   const [[], decrypted, _] = TwoFish.decrypt(encrypted, key);
-//   const decryptedString = bytesToString(decrypted);
-//   console.log({ message: bytes, encrypted, decrypted, message2: decryptedString });
-// }
-
-// {
-//   const [[], encrypted, key] = IDEA.encrypt(bytes);
-//   const [[], decrypted, _] = IDEA.decrypt(encrypted, key);
-//   const decryptedString = bytesToString(decrypted);
-//   console.log({ message: bytes, encrypted, decrypted, message2: decryptedString });
-// }
+const clearFields = () => {
+  form.inputString.value = "";
+  form.fileInput.value = null;
+  form.inputNonce.value = "";
+};
 
 const form = document.getElementsByTagName("form")[0];
 const runAlgorithmButton = document.getElementById("run-algorithm");
@@ -36,9 +23,12 @@ const outputType = document.getElementById("output-type");
 const fileInput = document.getElementById("fileInput");
 const downloadText = document.getElementById("download-text");
 
-var temporaryText = "";
+form.selectProcess.addEventListener("change", () => {
+  clearFields();
+});
 
 form.selectEncryption.addEventListener("change", () => {
+  clearFields();
   if (form.selectEncryption.value.trim() == "chacha20") {
     document.getElementById("nonce-group").classList.remove("hidden");
   } else {
@@ -82,7 +72,7 @@ downloadText.addEventListener("click", () => {
   const type = form.selectProcess.value;
 
   if (type === "decrypt") {
-    const blob = new Blob([temporaryText], { type: "text/plain" });
+    const blob = new Blob([outputResult.textContent], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
@@ -114,9 +104,6 @@ downloadText.addEventListener("click", () => {
 });
 
 runAlgorithmButton.addEventListener("click", async () => {
-  console.log("Hi");
-  console.log(form.inputString);
-
   const inputString = form.inputString.value;
   const type = form.selectProcess.value;
   const encryptionType = form.selectEncryption.value as string;
@@ -196,7 +183,6 @@ runAlgorithmButton.addEventListener("click", async () => {
       inputType.textContent = `(Plaintext)`;
       outputType.textContent = `(Hexadecimal)`;
 
-      temporaryText = encrypted.toString(16);
       downloadText.classList.remove("d-none");
       break;
     }
@@ -208,7 +194,18 @@ runAlgorithmButton.addEventListener("click", async () => {
       ///  4. Display the hex string and the partial outputs.
       const decryptionFunction = decryptionFunctions[encryptionType] as EncryptDecrypt;
 
-      const bytes = BigInt(`0x${inputString}`);
+      let bytes: bigint;
+      try {
+        try {
+          bytes = BigInt(`0x${inputString}`);
+        } catch (e) {
+          bytes = BigInt(inputString);
+        }
+      } catch (e) {
+        alert("The input string is not a valid hex value.");
+        return;
+      }
+      // const bytes = BigInt(`0x${inputString}`);
       const [partialOutputs, encrypted, resolvedKey, keyHash] = await decryptionFunction(
         bytes,
         key,
@@ -253,11 +250,8 @@ runAlgorithmButton.addEventListener("click", async () => {
       inputType.textContent = `(Hexadecimal)`;
       outputType.textContent = `(Plaintext)`;
 
-      temporaryText = encrypted.toString(16);
       downloadText.classList.remove("d-none");
       break;
     }
   }
-
-  console.log(type);
 });
