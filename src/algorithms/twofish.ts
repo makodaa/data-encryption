@@ -1,4 +1,4 @@
-import { EncryptDecrypt, hashKeyBySHA256, PartialOutputs, random128BitKey } from "../utils";
+import { EncryptDecrypt, groupData, hashKeyBySHA256, PartialOutputs, random128BitKey } from "../utils";
 
 
 const BIT_128 = (1n << 128n) - 1n;
@@ -617,25 +617,6 @@ const ROR = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 
  * @returns the block shifted cyclically to the right by the specified amount
  */
 const ROR4 = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 4n, shiftAmount);
-
-/**
- * Groups the data into groups consisting of at most [groupSize] elements.
- * @param data the data to be grouped
- * @param groupSize the size of each group
- * @returns an array of groups of the specified size
- */
-const groupData = <T>(data: T[], groupSize: number): T[][] => {
-  const output: T[][] = [];
-  for (let i = 0; i < data.length; i += groupSize) {
-    const group: T[] = [];
-    for (let j = i; j < data.length && j < i + groupSize; ++j) {
-      group.push(data[j]);
-    }
-    output.push(group);
-  }
-
-  return output;
-}
 
 const bytesOfSingle = (block: bigint, count: number): bigint[] => {
   const bytes: bigint[] = [];

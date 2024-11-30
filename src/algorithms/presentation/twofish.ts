@@ -86,8 +86,8 @@ type KeySchedule = [K: bigint[], S: bigint[]];
 const generateKeySchedule = (key: bigint): KeySchedule => {
   const m: bigint[] = extractBytesFromBlob(key, 16n);
   const M: bigint[] = new Array(2 * k).fill(0n);
-  for (let i = 0; i <= 2 * k - 1; ++i) {
-    for (let j = 0; j <= 3; ++j) {
+  for (let i = 0; i < 2 * k; ++i) {
+    for (let j = 0; j < 4; ++j) {
       M[i] += m[4 * i + j] << BigInt(8 * j);
     }
   }

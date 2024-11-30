@@ -45,3 +45,23 @@ export const random128BitKey = (): string => {
 export type PartialOutputs = [title: string, value: string][];
 export type EncryptDecrypt = (messageHex: bigint, key?: string, nonce?: bigint) => //
   Promise<[partialOutputs: PartialOutputs, finalOutput: bigint, key: string, keyHash: bigint]>;
+
+
+/**
+ * Groups the data into groups consisting of at most [groupSize] elements.
+ * @param data the data to be grouped
+ * @param groupSize the size of each group
+ * @returns an array of groups of the specified size
+ */
+export const groupData = <T>(data: T[], groupSize: number): T[][] => {
+  const output: T[][] = [];
+  for (let i = 0; i < data.length; i += groupSize) {
+    const group: T[] = [];
+    for (let j = i; j < data.length && j < i + groupSize; ++j) {
+      group.push(data[j]);
+    }
+    output.push(group);
+  }
+
+  return output;
+}

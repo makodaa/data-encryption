@@ -2,7 +2,7 @@
  * 
  */
 
-import { EncryptDecrypt, hashKeyBySHA256, random128BitKey } from "../utils";
+import { EncryptDecrypt, groupData, hashKeyBySHA256, random128BitKey } from "../utils";
 
 export const encrypt: EncryptDecrypt = async (input: bigint, key?: string, nonce?: bigint) => {
   const resolvedKey = key || random128BitKey();
@@ -125,6 +125,12 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
     count, nonceWords[0], nonceWords[1], nonceWords[2],
   ] as ChaCha20State;
   const stateCopy = [...state] as ChaCha20State;
+  partialOutputs.push([
+    `Initial State`,
+    groupData(stateCopy.map(w => `0x${w.toString(16).padStart(8, "0")}`), 4)
+      .map((group) => group.join(" "))
+      .join("\n"),
+  ]);
 
   for (let i = 0; i < 20; i += 2) {
     // Odd round
@@ -132,15 +138,34 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
     quarterRound(stateCopy, 1, 5, 9, 13); // column 2
     quarterRound(stateCopy, 2, 6, 10, 14); // column 3
     quarterRound(stateCopy, 3, 7, 11, 15); // column 4
+    partialOutputs.push([
+      `Round ${i + 1} Column`,
+      groupData(stateCopy.map(w => `0x${w.toString(16).padStart(8, "0")}`), 4)
+        .map((group) => group.join(" "))
+        .join("\n"),
+    ]);
 
     // Even round
     quarterRound(stateCopy, 0, 5, 10, 15); // diagonal 1 (main diagonal)
     quarterRound(stateCopy, 1, 6, 11, 12); // diagonal 2
     quarterRound(stateCopy, 2, 7, 8, 13); // diagonal 3
     quarterRound(stateCopy, 3, 4, 9, 14); // diagonal 4
+    partialOutputs.push([
+      `Round ${i + 2} (Diagonals)`,
+      groupData(stateCopy.map(w => `0x${w.toString(16).padStart(8, "0")}`), 4)
+        .map((group) => group.join(" "))
+        .join("\n"),
+    ]);
   }
 
   const output = addState(state, stateCopy);
+    partialOutputs.push([
+      `Added State`,
+      groupData(output.map(w => `0x${w.toString(16).padStart(8, "0")}`), 4)
+        .map((group) => group.join(" "))
+        .join("\n"),
+    ]);
+
   partialOutputs.push([
     `Key Stream ${count}`,
     output//
