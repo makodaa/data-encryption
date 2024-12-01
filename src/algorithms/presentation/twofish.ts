@@ -110,11 +110,13 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
   const rho = 0x1010101n;
   const keys: bigint[] = [];
   for (let i = 0n; i < 20n; ++i) {
-    const A = H(2n * i * rho, mEven);
-    const B = ROL(H((2n * i + 1n) * rho, mOdd), 8n);
+    let A = H(2n * i * rho, mEven);
+    let B = H((2n * i + 1n) * rho, mOdd);
+    B = ROL(B, 8n);
 
-    const K2i = (A + B) & BIT_32;
-    const K2i1 = ROL((A + 2n * B) & BIT_32, 9n);
+    let K2i = (A + B) & BIT_32;
+    let K2i1 = (A + 2n * B) & BIT_32;
+    K2i1 = ROL(K2i1, 9n);
 
     keys.push(K2i);
     keys.push(K2i1);

@@ -1,5 +1,12 @@
-import { EncryptDecrypt, groupData, hashKeyBySHA256, PartialOutputs, random128BitKey } from "../utils";
-
+import {
+  byteHex,
+  dwordHex,
+  EncryptDecrypt,
+  groupData,
+  hashKeyBySHA256,
+  PartialOutputs,
+  random128BitKey,
+} from "../utils";
 
 const BIT_128 = (1n << 128n) - 1n;
 const BIT_32 = (1n << 32n) - 1n;
@@ -135,12 +142,12 @@ const generateKeySchedule = (key: bigint): [PartialOutputs, KeySchedule] => {
   ///   The bytes are converted into 2k words of 32 bits each.
 
   const partialOutputs: PartialOutputs = [];
-  partialOutputs.push(["Generation of Key Schedule", ""]);
+  partialOutputs.push(["Key Schedule", null]);
 
   const m: bigint[] = extractBytesFromBlob(key, 16n);
   partialOutputs.push([
     "Separation of Key into bytes",
-    m.map((byte) => byte.toString(16).padStart(2, "0")).join(", "),
+    m.map(byteHex).join(", "),
   ]);
 
   const M: bigint[] = new Array(2 * k).fill(0n);
@@ -151,7 +158,7 @@ const generateKeySchedule = (key: bigint): [PartialOutputs, KeySchedule] => {
   }
   partialOutputs.push([
     "Conversion of bytes to 32-bit words",
-    M.map((word) => word.toString(16).padStart(8, "0")).join(", "),
+    M.map(dwordHex).join(", "),
   ]);
 
   const mEven: bigint[] = [];
@@ -162,30 +169,44 @@ const generateKeySchedule = (key: bigint): [PartialOutputs, KeySchedule] => {
   }
   partialOutputs.push([
     "Separation of 32-bit words into even and odd words",
-    "M[even]: " + mEven.map((word) => word.toString(16).padStart(8, "0")).join(", ") + "\n" +
-    "M[odd]: "  +  mOdd.map((word) => word.toString(16).padStart(8, "0")).join(", "),
+    "M[even]: " + mEven.map(dwordHex).join(", ") + "\n" +
+    "M[odd]: "  +  mOdd.map(dwordHex).join(", "),
   ]);
 
   const S: bigint[] = [];
   const vectors = groupData(m, 8);
+  partialOutputs.push(["Generation of S-box key", null]);
   for (let i = 0; i < k; ++i) {
     const si = rs(vectors[i]);
+    partialOutputs.push([
+      `Generation of S-box key ${i + 1}`,
+      `V[${i}]: ${vectors[i].map(byteHex).join(", ")}` + "\n" +
+      `S[${i}] = (RS)(V[${i}]): ${si.map(byteHex).join(", ")}`,
+    ]);
 
     S.unshift(si[0] | (si[1] << 8n) | (si[2] << 16n) | (si[3] << 24n));
   }
   partialOutputs.push([
-    "Generation of S-boxes",
-    S.map((word) => word.toString(16).padStart(8, "0")).join(", "),
+    "Generation of S-box keys",
+    S.map(dwordHex).join(", "),
   ]);
 
   const rho = 0x1010101n;
   const keys: bigint[] = [];
   for (let i = 0n; i < 20n; ++i) {
-    const A = H(2n * i * rho, mEven);
-    const B = ROL(H((2n * i + 1n) * rho, mOdd), 8n);
+    let A = H(2n * i * rho, mEven);
+    let B = H((2n * i + 1n) * rho, mOdd);
+    B = ROL(B, 8n);
 
-    const K2i = (A + B) & BIT_32;
-    const K2i1 = ROL((A + 2n * B) & BIT_32, 9n);
+    let K2i = (A + B) & BIT_32;
+    let K2i1 = (A + 2n * B) & BIT_32;
+    K2i1 = ROL(K2i1, 9n);
+
+    partialOutputs.push([
+      `Generation of Subkeys K[${i * 2n}] and K[${i * 2n + 1n}]`,
+      `A: ${dwordHex(A)}, B: ${dwordHex(B)}` + "\n" +
+      `K[${i * 2n}]: ${dwordHex(K2i)}, K[${i * 2n + 1n}]: ${dwordHex(K2i1)}`,
+    ]);
 
     keys.push(K2i);
     keys.push(K2i1);
@@ -193,7 +214,7 @@ const generateKeySchedule = (key: bigint): [PartialOutputs, KeySchedule] => {
 
   partialOutputs.push([
     "Generation of Subkeys",
-    keys.map((word) => word.toString(16).padStart(8, "0")).join(", "),
+    keys.map(dwordHex).join(", "),
   ]);
 
   return [partialOutputs, [keys, S]];
@@ -217,13 +238,13 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   let [r0, r1, r2, r3] = littleEndianConversion(bytes);
   partialOutputs.push([
     "Input Block",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+    `${dwordHex(r0)}, ${dwordHex(r1)}, ${dwordHex(r2)}, ${dwordHex(r3)}`
   ]);
 
   [r0, r1, r2, r3] = inputWhiten([r0, r1, r2, r3], keySchedule);
   partialOutputs.push([
     "Input Whitening",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+    `${dwordHex(r0)}, ${dwordHex(r1)}, ${dwordHex(r2)}, ${dwordHex(r3)}`
   ]);
 
   /// In each of the 16 rounds, the first two words are used as the input to the function F,
@@ -235,14 +256,14 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
 
     partialOutputs.push([
       `Round ${r + 1}`,
-      `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+      `${dwordHex(r0)}, ${dwordHex(r1)}, ${dwordHex(r2)}, ${dwordHex(r3)}`
     ]);
   }
 
   [r0, r1, r2, r3] = outputWhiten([r2, r3, r0, r1], keySchedule);
   partialOutputs.push([
     "Output Whitening",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+    `${dwordHex(r0)}, ${dwordHex(r1)}, ${dwordHex(r2)}, ${dwordHex(r3)}`
   ]);
 
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);
@@ -268,13 +289,13 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   let [r0, r1, r2, r3] = littleEndianConversion(bytes);
   partialOutputs.push([
     "Input Block",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+    `${dwordHex(r0)}, ${dwordHex(r1)}, ${dwordHex(r2)}, ${dwordHex(r3)}`
   ]);
 
   [r0, r1, r2, r3] = outputWhiten([r0, r1, r2, r3], keySchedule);
   partialOutputs.push([
     "Reverse Output Whitening",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`,
+    `${dwordHex(r0)}, ${dwordHex(r1)}, ${dwordHex(r2)}, ${dwordHex(r3)}`,
   ]);
 
   /// In each of the 16 rounds, the first two words are used as the input to the function F,
@@ -286,14 +307,14 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
 
     partialOutputs.push([
       `Round ${16 - r}`,
-      `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+      `${dwordHex(r0)}, ${dwordHex(r1)}, ${dwordHex(r2)}, ${dwordHex(r3)}`
     ]);
   }
 
   [r0, r1, r2, r3] = inputWhiten([r2, r3, r0, r1], keySchedule);
   partialOutputs.push([
     "Reverse Input Whitening",
-    `${r0.toString(16)}, ${r1.toString(16)}, ${r2.toString(16)}, ${r3.toString(16)}`
+    `${dwordHex(r0)}, ${dwordHex(r1)}, ${dwordHex(r2)}, ${dwordHex(r3)}`
   ]);
 
   const outputBytes = inverseLittleEndianConversion([r0, r1, r2, r3]);

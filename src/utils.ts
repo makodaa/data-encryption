@@ -42,7 +42,7 @@ export const random128BitKey = (): string => {
 };
 
 
-export type PartialOutputs = [title: string, value: string][];
+export type PartialOutputs = [title: string, value: string | null][];
 export type EncryptDecrypt = (messageHex: bigint, key?: string, nonce?: bigint) => //
   Promise<[partialOutputs: PartialOutputs, finalOutput: bigint, key: string, keyHash: bigint]>;
 
@@ -65,3 +65,6 @@ export const groupData = <T>(data: T[], groupSize: number): T[][] => {
 
   return output;
 }
+
+export const byteHex = (byte: bigint): string => byte.toString(16).padStart(2, "0");
+export const dwordHex = (dword: bigint): string => dword.toString(16).padStart(8, "0");

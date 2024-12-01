@@ -189,7 +189,6 @@ const multiplicativeInverse = (value: bigint): bigint => {
     [r, newR] = [newR, r - quotient * newR];
   }
 
-  console.log({ value });
   if (r > 1n) {
     throw new Error(`Value is not invertible. ${value}`);
   }
