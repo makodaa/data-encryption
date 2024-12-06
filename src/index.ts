@@ -3,8 +3,10 @@ import * as IDEA from "./algorithms/idea";
 import * as TwoFish from "./algorithms/twofish";
 import { bytesToString, EncryptDecrypt, stringToBytes } from "./utils";
 
-const clearFields = () => {
-  form.inputString.value = "";
+const clearFields = (clearInputString = true) => {
+  if (clearInputString) {
+    form.inputString.value = "";
+  }
   form.fileInput.value = null;
   form.inputNonce.value = "";
 };
@@ -28,7 +30,7 @@ form.selectProcess.addEventListener("change", () => {
 });
 
 form.selectEncryption.addEventListener("change", () => {
-  clearFields();
+  clearFields(false);
   if (form.selectEncryption.value.trim() == "chacha20") {
     document.getElementById("nonce-group").classList.remove("hidden");
   } else {
@@ -45,8 +47,7 @@ fileInput.addEventListener("change", (e: Event) => {
 
     reader.onload = function (e) {
       const content = e.target.result;
-      (document.getElementById("inputString") as HTMLInputElement).value =
-        content as string;
+      (document.getElementById("inputString") as HTMLInputElement).value = content as string;
     };
 
     reader.readAsText(file);
@@ -58,8 +59,7 @@ fileInput.addEventListener("change", (e: Event) => {
       const bytes = [...new Uint8Array(content as ArrayBuffer)];
       const aggregate = bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
-      (document.getElementById("inputString") as HTMLInputElement).value =
-        aggregate as string;
+      (document.getElementById("inputString") as HTMLInputElement).value = aggregate as string;
     };
 
     reader.readAsArrayBuffer(file);
@@ -142,20 +142,14 @@ runAlgorithmButton.addEventListener("click", async () => {
       const [partialOutputs, encrypted, resolvedKey, keyHash] = await encryptionFunction(
         bytes,
         key,
-        Number.isNaN(nonce) ? 0n : BigInt(nonce),
+        Number.isNaN(nonce) ? 0n : BigInt(nonce)
       );
 
       processHolder.innerHTML = "";
       for (let i = 0; i < partialOutputs.length; ++i) {
         const [title, content] = partialOutputs[i];
         const processDiv = document.createElement("div");
-        processDiv.classList.add(
-          "d-flex",
-          "flex-column",
-          "p-2",
-          "mb-3",
-          "border"
-        );
+        processDiv.classList.add("d-flex", "flex-column", "p-2", "mb-3", "border");
         const processSpan = document.createElement("span");
         processSpan.classList.add("p");
         processSpan.textContent = title;
@@ -213,20 +207,14 @@ runAlgorithmButton.addEventListener("click", async () => {
       const [partialOutputs, encrypted, resolvedKey, keyHash] = await decryptionFunction(
         bytes,
         key,
-        Number.isNaN(nonce) ? 0n : BigInt(nonce),
+        Number.isNaN(nonce) ? 0n : BigInt(nonce)
       );
 
       processHolder.innerHTML = "";
       for (let i = 0; i < partialOutputs.length; ++i) {
         const [title, content] = partialOutputs[i];
         const processDiv = document.createElement("div");
-        processDiv.classList.add(
-          "d-flex",
-          "flex-column",
-          "p-2",
-          "mb-3",
-          "border"
-        );
+        processDiv.classList.add("d-flex", "flex-column", "p-2", "mb-3", "border");
         const processSpan = document.createElement("span");
         processSpan.classList.add("p");
         processSpan.textContent = title;

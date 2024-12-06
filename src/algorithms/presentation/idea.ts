@@ -34,9 +34,9 @@ export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
   const keySchedule = createKeySchedule(hashedKey, { inverse: false });
 
   /// Encryption of the blocks
-  const blocks = extract64BitBytesFromBLOB(messageHex);
+  const blocks = extract64BitBlocksFromBLOB(messageHex);
   const outputs = blocks.map((b) => encryptBlock(b, keySchedule));
-  const encryptedText = extractBLOBFrom64BitBytes(outputs);
+  const encryptedText = extractBLOBFrom64BitBlocks(outputs);
 
   return encryptedText;
 };
@@ -53,9 +53,9 @@ export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
   const keySchedule = createKeySchedule(hashedKey, { inverse: true });
 
   /// Decryption of the blocks
-  const blocks = extract64BitBytesFromBLOB(messageHex);
+  const blocks = extract64BitBlocksFromBLOB(messageHex);
   const outputs = blocks.map((b) => decryptBlock(b, keySchedule));
-  const decryptedText = extractBLOBFrom64BitBytes(outputs);
+  const decryptedText = extractBLOBFrom64BitBlocks(outputs);
 
   return decryptedText;
 };
@@ -324,7 +324,7 @@ const extractBitsIntoBlocks = (block: bigint, blockSize: bigint, blockCount?: bi
   return blocks;
 };
 
-const extract64BitBytesFromBLOB = (hex: bigint): bigint[] => {
+const extract64BitBlocksFromBLOB = (hex: bigint): bigint[] => {
   const blocks: bigint[] = [];
   while (hex > 0) {
     blocks.unshift(hex & ((1n << 64n) - 1n));
@@ -334,7 +334,7 @@ const extract64BitBytesFromBLOB = (hex: bigint): bigint[] => {
   return blocks;
 };
 
-const extractBLOBFrom64BitBytes = (blocks: bigint[]): bigint => {
+const extractBLOBFrom64BitBlocks = (blocks: bigint[]): bigint => {
   let hex = 0n;
 
   for (const block of blocks) {

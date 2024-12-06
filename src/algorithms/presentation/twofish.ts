@@ -362,7 +362,7 @@ const F = (r0: bigint, r1: bigint, round: number, [K, S]: KeySchedule): [bigint,
 
 
 /**
- * The H function is a 32-bit block cipher that takes a 32-bit block of data
+ * The H function is a 32-bit block substitution that takes a 32-bit block of data
  *  and a 128-bit key schedule and produces a 32-bit block of data.
  * @param X The block of data.
  * @param L The different values of the key schedule.
