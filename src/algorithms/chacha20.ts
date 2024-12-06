@@ -127,9 +127,7 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
   const stateCopy = [...state] as ChaCha20State;
   partialOutputs.push([
     `Initial State`,
-    groupData(stateCopy.map(w => `0x${w.toString(16).padStart(8, "0")}`), 4)
-      .map((group) => group.join(" "))
-      .join("\n"),
+    stringifyState(stateCopy),
   ]);
 
   for (let i = 0; i < 20; i += 2) {
@@ -139,10 +137,8 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
     quarterRound(stateCopy, 2, 6, 10, 14); // column 3
     quarterRound(stateCopy, 3, 7, 11, 15); // column 4
     partialOutputs.push([
-      `Round ${i + 1} Column`,
-      groupData(stateCopy.map(w => `0x${w.toString(16).padStart(8, "0")}`), 4)
-        .map((group) => group.join(" "))
-        .join("\n"),
+      `Round ${i + 1} (Column)`,
+      stringifyState(stateCopy),
     ]);
 
     // Even round
@@ -152,25 +148,21 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
     quarterRound(stateCopy, 3, 4, 9, 14); // diagonal 4
     partialOutputs.push([
       `Round ${i + 2} (Diagonals)`,
-      groupData(stateCopy.map(w => `0x${w.toString(16).padStart(8, "0")}`), 4)
-        .map((group) => group.join(" "))
-        .join("\n"),
+      stringifyState(stateCopy),
     ]);
   }
 
   const output = addState(state, stateCopy);
     partialOutputs.push([
       `Added State`,
-      groupData(output.map(w => `0x${w.toString(16).padStart(8, "0")}`), 4)
-        .map((group) => group.join(" "))
-        .join("\n"),
+      stringifyState(stateCopy),
     ]);
 
   partialOutputs.push([
     `Key Stream ${count}`,
     output//
       .flatMap((p) => extractBytesFromBlob(p).reverse())
-      .map((word) => "0x" + word.toString(16).padStart(2, "0"))
+      .map((word) => word.toString(16).padStart(2, "0"))
       .join(" "),
   ]);
 
@@ -281,3 +273,9 @@ const extractBlobFromBytes = (blocks: bigint[]): bigint => {
 
   return hex;
 };
+
+const stringifyState = (state: ChaCha20State): string => {
+  return groupData(state.map(w => w.toString(16).padStart(8, "0")), 4)
+    .map((group) => group.join(" "))
+    .join("\n");
+}

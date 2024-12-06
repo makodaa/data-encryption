@@ -196,11 +196,11 @@ const generateKeySchedule = (key: bigint): [PartialOutputs, KeySchedule] => {
   for (let i = 0n; i < 20n; ++i) {
     let A = H(2n * i * rho, mEven);
     let B = H((2n * i + 1n) * rho, mOdd);
-    B = ROL(B, 8n);
+    B = ROTL(B, 8n);
 
     let K2i = (A + B) & BIT_32;
     let K2i1 = (A + 2n * B) & BIT_32;
-    K2i1 = ROL(K2i1, 9n);
+    K2i1 = ROTL(K2i1, 9n);
 
     partialOutputs.push([
       `Generation of Subkeys K[${i * 2n}] and K[${i * 2n + 1n}]`,
@@ -252,7 +252,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   ///   of F, and then rotated by left.
   for (let r = 0; r < 16; ++r) {
     const [f0, f1] = F(r0, r1, r, keySchedule);
-    [r0, r1, r2, r3] = [ROR(r2 ^ f0, 1n), ROL(r3, 1n) ^ f1, r0, r1];
+    [r0, r1, r2, r3] = [ROTR(r2 ^ f0, 1n), ROTL(r3, 1n) ^ f1, r0, r1];
 
     partialOutputs.push([
       `Round ${r + 1}`,
@@ -303,7 +303,7 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   ///   of F, and then rotated by left.
   for (let r = 15; r >= 0; --r) {
     const [f0, f1] = F(r0, r1, r, keySchedule);
-    [r0, r1, r2, r3] = [ROL(r2, 1n) ^ f0, ROR(r3 ^ f1, 1n), r0, r1];
+    [r0, r1, r2, r3] = [ROTL(r2, 1n) ^ f0, ROTR(r3 ^ f1, 1n), r0, r1];
 
     partialOutputs.push([
       `Round ${16 - r}`,
@@ -489,7 +489,7 @@ const mds = (vector: bigint[]): bigint[] =>
  */
 const F = (r0: bigint, r1: bigint, round: number, [K, S]: KeySchedule): [bigint, bigint] => {
   const t0 = H(r0, S);
-  const t1 = H(ROL(r1, 8n), S);
+  const t1 = H(ROTL(r1, 8n), S);
 
   const f0 = (t0 + t1 + K[2 * round + 8]) & 0xFFn;
   const f1 = (t0 + 2n * t1 + K[2 * round + 9]) & 0xFFn;
@@ -537,9 +537,9 @@ const _qSubstitute = (block: bigint, tables: bigint[][]): bigint => {
 
   let a: bigint, b: bigint;
   [a, b] = [block / 16n, block % 16n];
-  [a, b] = [a ^ b      , (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
+  [a, b] = [a ^ b      , (a ^ ROTR4(b, 1n) ^ (8n * a)) % 16n];
   [a, b] = [t0(a)      , t1(b)];
-  [a, b] = [a ^ b      , (a ^ ROR4(b, 1n) ^ (8n * a)) % 16n];
+  [a, b] = [a ^ b      , (a ^ ROTR4(b, 1n) ^ (8n * a)) % 16n];
   [a, b] = [t2(a)      , t3(b)];
 
   return 16n * b + a;
@@ -608,7 +608,7 @@ const cyclicallyLeftShift = (block: bigint, blockSize: bigint, shiftAmount: bigi
  * @param shiftAmount the shift amount
  * @returns the block shifted cyclically to the left by the specified amount
  */
-const ROL = (block: bigint, shiftAmount: bigint) => cyclicallyLeftShift(block, 32n, shiftAmount);
+const ROTL = (block: bigint, shiftAmount: bigint) => cyclicallyLeftShift(block, 32n, shiftAmount);
 
 /**
  * Cyclically shifts a block to the right by the specified amount.
@@ -629,7 +629,7 @@ const cyclicallyRightShift = (block: bigint, blockSize: bigint, shiftAmount: big
  * @param shiftAmount the shift amount
  * @returns the block shifted cyclically to the right by the specified amount
  */
-const ROR = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 32n, shiftAmount);
+const ROTR = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 32n, shiftAmount);
 
 /**
  * This cyclically shifts a 4-bit block to the right by the specified amount.
@@ -637,7 +637,7 @@ const ROR = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 
  * @param shiftAmount the shift amount
  * @returns the block shifted cyclically to the right by the specified amount
  */
-const ROR4 = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 4n, shiftAmount);
+const ROTR4 = (block: bigint, shiftAmount: bigint) => cyclicallyRightShift(block, 4n, shiftAmount);
 
 const bytesOfSingle = (block: bigint, count: number): bigint[] => {
   const bytes: bigint[] = [];
