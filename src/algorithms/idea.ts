@@ -17,7 +17,7 @@
  *   Lai, X., Massey, J.L. (1991). A Proposal for a New Block Encryption Standard. In: Damgård, I.B. (eds) Advances in Cryptology — EUROCRYPT ’90. EUROCRYPT 1990. Lecture Notes in Computer Science, vol 473. Springer, Berlin, Heidelberg. https://doi.org/10.1007/3-540-46877-3_35
  */
 
-import { EncryptDecrypt, hashKeyBySHA256 } from "../utils";
+import { EncryptDecrypt, hashKeyBySHA256, PartialOutputs } from "../utils";
 
 
 const BIT_128 = (1n << 128n) - 1n;
@@ -38,21 +38,23 @@ export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
   const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
 
   /// Generation of key schedule
-  const keySchedule = createKeySchedule(hashedKey, { inverse: false });
+  const [pO, keySchedule] = createKeySchedule(hashedKey, { inverse: false });
+  partialOutputs.push(...pO);
 
   const blocks = extract64BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((b) => encryptBlock(b, keySchedule));
 
   /// Extract the partial outputs and the encrypted blocks.
-  for (const [partialOutput, decryptedBlock] of outputs) {
+  const initialLength = partialOutputs.length;
+  for (const [partialOutput, encryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      if (partialOutputs[i] == null) {
-        partialOutputs[i] = partialOutput[i];
+      if (partialOutputs[initialLength + i] == null) {
+        partialOutputs[initialLength + i] = partialOutput[i];
       } else {
-        partialOutputs[i][1] += "\n" + partialOutput[i][1];
+        partialOutputs[initialLength + i][1] += "\n " + partialOutput[i][1];
       }
     }
-    encryptedBlocks.push(decryptedBlock);
+    encryptedBlocks.push(encryptedBlock);
   }
   const encryptedText = extractBLOBFrom64BitBytes(encryptedBlocks);
   return [partialOutputs, encryptedText, resolvedKey, hashedKey];
@@ -72,19 +74,21 @@ export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
   /// Key resolution
   const resolvedKey = key || random128BitKey();
   const hashedKey = await hashKeyBySHA256(resolvedKey) & BIT_128;
-  const keySchedule = createKeySchedule(hashedKey, { inverse: true });
+  const [pO, keySchedule] = createKeySchedule(hashedKey, { inverse: true });
+  partialOutputs.push(...pO);
 
   /// Decryption of the blocks
   const blocks = extract64BitBytesFromBLOB(messageHex);
   const outputs = blocks.map((b) => decryptBlock(b, keySchedule));
 
   /// Extract the partial outputs and the decrypted blocks.
+  const initialLength = partialOutputs.length;
   for (const [partialOutput, decryptedBlock] of outputs) {
     for (let i = 0; i < partialOutput.length; i++) {
-      if (partialOutputs[i] == null) {
-        partialOutputs[i] = partialOutput[i];
+      if (partialOutputs[initialLength + i] == null) {
+        partialOutputs[initialLength + i] = partialOutput[i];
       } else {
-        partialOutputs[i][1] += "\n" + partialOutput[i][1];
+        partialOutputs[initialLength + i][1] += "\n " + partialOutput[i][1];
       }
     }
     decryptedBlocks.push(decryptedBlock);
@@ -113,12 +117,32 @@ const cyclicLeftShift = (block: bigint, blockSize: bigint, shiftAmount: bigint) 
  * @param key the key to generate the key schedule from.
  * @returns sequence of 6 subkeys for each round, and 4 subkeys for the half-round.
  */
-const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }): bigint[][] => {
+const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }): 
+  [PartialOutputs, bigint[][]] => {
+  const partialOutputs: PartialOutputs = [];
+
+  partialOutputs.push([
+    `${inverse ? "Inverse " : ""}Key Schedule`,
+    null,
+  ]);
+
+  let rotations = 0;
   let keyBits = key;
   const contiguousKeys: bigint[] = [];
-
   while (contiguousKeys.length < 52) {
     const subKeys = extractBitsIntoBlocks(keyBits, 16n);
+
+    partialOutputs.push([
+      `Rotated Key ${rotations++}`,
+      keyBits.toString(16).padStart(32, "0"),
+    ]);
+
+    partialOutputs.push([
+      `Subkeys ${contiguousKeys.length + 1} to ` +
+        `${Math.min(contiguousKeys.length + 1 + subKeys.length - 1, 52)}`,
+      subKeys.slice(0, Math.min(subKeys.length, 52 - contiguousKeys.length)).map((s) => s.toString(16)).join(", "),
+    ]);
+
     for (const subKey of subKeys) {
       if (contiguousKeys.length < 52) {
         contiguousKeys.push(subKey);
@@ -142,7 +166,7 @@ const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }): bigi
       ].filter((s) => s != null));
     }
 
-    return groups;
+    return [partialOutputs, groups];
   } else {
     const groups: bigint[][] = [];
 
@@ -157,7 +181,7 @@ const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }): bigi
       ].filter((s) => s != null));
 
     }
-    return groups;
+    return [partialOutputs, groups];
   }
 };
 

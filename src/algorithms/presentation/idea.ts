@@ -74,7 +74,7 @@ const cyclicLeftShift = (block: bigint, blockSize: bigint, shiftAmount: bigint) 
   ((1n << blockSize) - 1n);
 
 /**
- * Generates the key schedule for the IDEA algorithm.
+ * Generates the subkeys for the IDEA algorithm.
  * @param key the key to generate the key schedule from.
  * @returns sequence of 6 subkeys for each round, and 4 subkeys for the half-round.
  */
@@ -82,11 +82,14 @@ const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }): bigi
   let keyBits = key;
   const contiguousKeys: bigint[] = [];
 
+  outer:
   while (contiguousKeys.length < 52) {
     const subKeys = extractBitsIntoBlocks(keyBits, 16n);
     for (const subKey of subKeys) {
       if (contiguousKeys.length < 52) {
         contiguousKeys.push(subKey);
+      } else {
+        break outer;
       }
     }
 
