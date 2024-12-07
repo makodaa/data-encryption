@@ -1,5 +1,16 @@
 /**
+ * ChaCha20 is a symmetric stream cipher that operates on continuous streams of data
+ *   using a 256-bit key and a 96-bit nonce.
  * 
+ * The generation of the key stream depends on the key, nonce, and a block counter.
+ *   A state consisting of 16 32-bit words is initialized, then run through 20 rounds of
+ *   quarter-round operations.
+ * 
+ * The resulting state is then streamed through a function, which applies bitwise-XOR
+ *  to the input data and the key stream.
+ * 
+ *  The reference used for this implementation is:
+ *    RFC 8439: CHACHA20 and POLY1305 for IETF protocols. (n.d.). IETF Datatracker. https://datatracker.ietf.org/doc/html/rfc8439
  */
 
 import { EncryptDecrypt, groupData, hashKeyBySHA256, random128BitKey } from "../utils";
@@ -177,7 +188,9 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
  */
 const keyStream = function* (key: bigint, nonce: bigint):
   Generator<[iteration: bigint, [title: string, content: string][], bigint]> {
-  for (let i = 1n; ; ++i) {
+  let i = 0n;
+
+  while (true) {
     const [partialOutput, block] = chaChaBlock(key, nonce, i);
 
     for (const word of block) {
@@ -188,6 +201,8 @@ const keyStream = function* (key: bigint, nonce: bigint):
         }
       }
     }
+
+    i++;
   }
 };
 

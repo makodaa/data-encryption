@@ -1,3 +1,15 @@
+/**
+ * TwoFish algorithm implementation.
+ * 
+ * The TwoFish algorithm is a symmetric key block cipher with a block size of 128 bits
+ *  and key sizes of 128, 192, or 256 bits. It is based on a Feistel network structure
+ * and uses a key-dependent S-boxes, a complex key schedule, and a pre-whitening and
+ * post-whitening stage.
+ * 
+ * The documents used as a reference can be seen in the following documents:
+ *   Schneier, B., Kelsely, J., Whiting, D., Wagner, D., Hall, C., & Ferguson, N. (1998, June 15). Twofish: a 128-Bit block cipher. Schneier on Security. https://www.schneier.com/wp-content/uploads/2016/02/paper-twofish-paper.pdf
+ */
+
 import {
   byteHex,
   dwordHex,

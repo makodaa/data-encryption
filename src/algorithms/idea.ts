@@ -17,7 +17,7 @@
  *   Lai, X., Massey, J.L. (1991). A Proposal for a New Block Encryption Standard. In: Damgård, I.B. (eds) Advances in Cryptology — EUROCRYPT ’90. EUROCRYPT 1990. Lecture Notes in Computer Science, vol 473. Springer, Berlin, Heidelberg. https://doi.org/10.1007/3-540-46877-3_35
  */
 
-import { EncryptDecrypt, hashKeyBySHA256, PartialOutputs } from "../utils";
+import { EncryptDecrypt, hashKeyBySHA256, PartialOutputs, wordHex } from "../utils";
 
 
 const BIT_128 = (1n << 128n) - 1n;
@@ -42,7 +42,7 @@ export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
   partialOutputs.push(...pO);
 
   const blocks = extract64BitBytesFromBLOB(messageHex);
-  const outputs = blocks.map((b) => encryptBlock(b, keySchedule));
+  const outputs = blocks.map((b) => processBlock(b, keySchedule));
 
   /// Extract the partial outputs and the encrypted blocks.
   const initialLength = partialOutputs.length;
@@ -79,7 +79,7 @@ export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
 
   /// Decryption of the blocks
   const blocks = extract64BitBytesFromBLOB(messageHex);
-  const outputs = blocks.map((b) => decryptBlock(b, keySchedule));
+  const outputs = blocks.map((b) => processBlock(b, keySchedule));
 
   /// Extract the partial outputs and the decrypted blocks.
   const initialLength = partialOutputs.length;
@@ -128,8 +128,8 @@ const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }):
 
   let rotations = 0;
   let keyBits = key;
-  const contiguousKeys: bigint[] = [];
-  while (contiguousKeys.length < 52) {
+  const subkeys: bigint[] = [];
+  while (subkeys.length < 52) {
     const subKeys = extractBitsIntoBlocks(keyBits, 16n);
 
     partialOutputs.push([
@@ -138,31 +138,32 @@ const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }):
     ]);
 
     partialOutputs.push([
-      `Subkeys ${contiguousKeys.length + 1} to ` +
-        `${Math.min(contiguousKeys.length + 1 + subKeys.length - 1, 52)}`,
-      subKeys.slice(0, Math.min(subKeys.length, 52 - contiguousKeys.length)).map((s) => s.toString(16)).join(", "),
+      `Subkeys ${subkeys.length + 1} to ` +
+        `${Math.min(subkeys.length + 1 + subKeys.length - 1, 52)}`,
+      subKeys.slice(0, Math.min(subKeys.length, 52 - subkeys.length)).map((s) => s.toString(16)).join(", "),
     ]);
 
     for (const subKey of subKeys) {
-      if (contiguousKeys.length < 52) {
-        contiguousKeys.push(subKey);
+      if (subkeys.length < 52) {
+        subkeys.push(subKey);
       }
     }
 
     keyBits = cyclicLeftShift(keyBits, 128n, 25n);
   }
 
+  console.log(subkeys);
   if (inverse) {
     const groups: bigint[][] = [];
 
-    for (let i = contiguousKeys.length - 1; i >= 0; i -= 6) {
+    for (let i = subkeys.length - 1; i >= 0; i -= 6) {
       groups.push([
-        multiplicativeInverse(contiguousKeys[i - 3]),
-        additiveInverse(contiguousKeys[i - 2]),
-        additiveInverse(contiguousKeys[i - 1]),
-        multiplicativeInverse(contiguousKeys[i]),
-        contiguousKeys[i - 5],
-        contiguousKeys[i - 4],
+        multiplicativeInverse(subkeys[i - 3]),
+        additiveInverse(subkeys[i - 2]),
+        additiveInverse(subkeys[i - 1]),
+        multiplicativeInverse(subkeys[i]),
+        subkeys[i - 5],
+        subkeys[i - 4],
       ].filter((s) => s != null));
     }
 
@@ -170,14 +171,14 @@ const createKeySchedule = (key: bigint, { inverse }: { inverse: boolean }):
   } else {
     const groups: bigint[][] = [];
 
-    for (let i = 0; i < contiguousKeys.length; i += 6) {
+    for (let i = 0; i < subkeys.length; i += 6) {
       groups.push([
-        contiguousKeys[i],
-        contiguousKeys[i + 1],
-        contiguousKeys[i + 2],
-        contiguousKeys[i + 3],
-        contiguousKeys[i + 4],
-        contiguousKeys[i + 5],
+        subkeys[i],
+        subkeys[i + 1],
+        subkeys[i + 2],
+        subkeys[i + 3],
+        subkeys[i + 4],
+        subkeys[i + 5],
       ].filter((s) => s != null));
 
     }
@@ -247,7 +248,6 @@ const multiplicativeInverse = (value: bigint): bigint => {
     [r, newR] = [newR, r - quotient * newR];
   }
 
-  console.log({ value });
   if (r > 1n) {
     throw new Error(`Value is not invertible. ${value}`);
   }
@@ -264,13 +264,13 @@ type EncryptDecryptBlock = (block: bigint, keySchedule: bigint[][]) => //
  * @param keySchedule The key schedule generated.
  * @returns The encrypted block of data.
  */
-const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
+const processBlock: EncryptDecryptBlock = (block, keySchedule) => {
   const partialOutputs: [title: string, content: string][] = [];
 
   let [x1, x2, x3, x4] = extractBitsIntoBlocks(block, 16n, 4n);
   partialOutputs.push([
     `Splitting 64-bit block into 4 16-bit blocks`,
-    `${x1.toString(16)}, ${x2.toString(16)}, ${x3.toString(16)}, ${x4.toString(16)}`,
+    `${wordHex(x1)}, ${wordHex(x2)}, ${wordHex(x3)}, ${wordHex(x4)}`,
   ]);
 
   for (let i = 0; i < 8; ++i) {
@@ -309,7 +309,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
 
     partialOutputs.push([
       `Round ${i + 1}`,
-      `${x1.toString(16)}, ${x2.toString(16)}, ${x3.toString(16)}, ${x4.toString(16)}`,
+      `${wordHex(x1)}, ${wordHex(x2)}, ${wordHex(x3)}, ${wordHex(x4)}`,
     ]);
   }
 
@@ -321,76 +321,7 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   const y4 = multiply(x4, z4);
   partialOutputs.push([
     `Round 8.5`,
-    `${y1.toString(16)}, ${y2.toString(16)}, ${y3.toString(16)}, ${y4.toString(16)}`,
-  ]);
-
-  return [partialOutputs, (y1 << 48n) | (y2 << 32n) | (y3 << 16n) | y4];
-};
-
-/**
- * Encrypts a block of data using the IDEA algorithm.
- * @param block A block of 64-bit data.
- * @param keySchedule The key schedule generated.
- * @returns The encrypted block of data.
- */
-const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  const partialOutputs: [title: string, content: string][] = [];
-
-  let [x1, x2, x3, x4] = extractBitsIntoBlocks(block, 16n, 4n);
-  partialOutputs.push([
-    `Splitting 64-bit block into 4 16-bit blocks`,
-    `${x1}, ${x2}, ${x3}, ${x4}`,
-  ]);
-
-
-  for (let i = 0; i < 8; ++i) {
-    const [z1, z2, z3, z4, z5, z6] = keySchedule[i];
-
-    //  1. Multiply X1 and the first subkey Z1.
-    const y1 = multiply(x1, z1);
-    //  2. Add X2 and the second subkey Z2.
-    const y2 = add(x2, z2);
-    //  3. Add X3 and the third subkey Z3.
-    const y3 = add(x3, z3);
-    //  4. Multiply X4 and the fourth subkey Z4.
-    const y4 = multiply(x4, z4);
-    //  5. Bitwise XOR the results of steps 1 and 3.
-    const y5 = y1 ^ y3;
-    //  6. Bitwise XOR the results of steps 2 and 4.
-    const y6 = y2 ^ y4;
-    //  7. Multiply the result of step 5 and the fifth subkey Z5.
-    const y7 = multiply(y5, z5);
-    //  8. Add the results of steps 6 and 7.
-    const y8 = add(y6, y7);
-    //  9. Multiply the result of step 8 and the sixth subkey Z6.
-    const y9 = multiply(y8, z6);
-    //  10. Add the results of steps 7 and 9.
-    const y10 = add(y7, y9);
-    //  11. Bitwise XOR the results of steps 1 and 9.
-    const y11 = y1 ^ y9;
-    //  12. Bitwise XOR the results of steps 3 and 9.
-    const y12 = y3 ^ y9;
-    //  13. Bitwise XOR the results of steps 2 and 10.
-    const y13 = y2 ^ y10;
-    //  14. Bitwise XOR the results of steps 4 and 10
-    const y14 = y4 ^ y10;
-
-    [x1, x2, x3, x4] = [y11, y13, y12, y14];
-    partialOutputs.push([
-      `Round ${i + 1}`,
-      `${x1}, ${x2}, ${x3}, ${x4}`,
-    ]);
-  }
-
-  // Round 8.5.
-  const [z1, z2, z3, z4] = keySchedule[8];
-  const y1 = multiply(x1, z1);
-  const y2 = add(x2, z2);
-  const y3 = add(x3, z3);
-  const y4 = multiply(x4, z4);
-  partialOutputs.push([
-    `Round 8.5`,
-    `${y1}, ${y2}, ${y3}, ${y4}`,
+    `${wordHex(y1)}, ${wordHex(y2)}, ${wordHex(y3)}, ${wordHex(y4)}`,
   ]);
 
   return [partialOutputs, (y1 << 48n) | (y2 << 32n) | (y3 << 16n) | y4];
@@ -432,23 +363,6 @@ const extractBLOBFrom64BitBytes = (blocks: bigint[]): bigint => {
   }
 
   return hex;
-};
-
-/**
- * Based off the code at this post from user <b>sfussenegger</b>:
- *  https://stackoverflow.com/questions/1660501/what-is-a-good-64bit-hash-function-in-java-for-textual-strings
- * @param string input string
- * @returns a hash of the input string.
- */
-const hash = (string: string): bigint => {
-  let h = 1125899906842597n; // prime
-  const len = string.length;
-
-  for (let i = 0; i < len; i++) {
-    h = 31n * h + BigInt(string.charCodeAt(i));
-  }
-
-  return h;
 };
 
 /**

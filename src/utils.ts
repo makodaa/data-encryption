@@ -67,4 +67,5 @@ export const groupData = <T>(data: T[], groupSize: number): T[][] => {
 }
 
 export const byteHex = (byte: bigint): string => byte.toString(16).padStart(2, "0");
+export const wordHex = (word: bigint): string => word.toString(16).padStart(4, "0");
 export const dwordHex = (dword: bigint): string => dword.toString(16).padStart(8, "0");

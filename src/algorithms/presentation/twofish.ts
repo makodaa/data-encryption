@@ -1,3 +1,15 @@
+/**
+ * TwoFish algorithm implementation.
+ * 
+ * The TwoFish algorithm is a symmetric key block cipher with a block size of 128 bits
+ *  and key sizes of 128, 192, or 256 bits. It is based on a Feistel network structure
+ * and uses a key-dependent S-boxes, a complex key schedule, and a pre-whitening and
+ * post-whitening stage.
+ * 
+ * The documents used as a reference can be seen in the following documents:
+ *   Schneier, B., Kelsely, J., Whiting, D., Wagner, D., Hall, C., & Ferguson, N. (1998, June 15). Twofish: a 128-Bit block cipher. Schneier on Security. https://www.schneier.com/wp-content/uploads/2016/02/paper-twofish-paper.pdf
+ */
+
 import { EncryptDecrypt, hashKeyBySHA256 } from "./utils";
 
 const BIT_128 = (1n << 128n) - 1n;
@@ -114,7 +126,7 @@ const generateKeySchedule = (key: bigint): KeySchedule => {
     let B = H((2n * i + 1n) * rho, mOdd);
     B = ROTL(B, 8n);
 
-    let K2i = (A + B) & BIT_32;
+    let K2i  = (A +      B) & BIT_32;
     let K2i1 = (A + 2n * B) & BIT_32;
     K2i1 = ROTL(K2i1, 9n);
 
@@ -142,7 +154,9 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     const [f0, f1] = F(r0, r1, r, keySchedule);
 
     // Apply the feistel transformation, and rotate the words.
-    [r0, r1, r2, r3] = [r0, r1, ROTR(r2 ^ f0, 1n), ROTL(r3, 1n) ^ f1];
+    r2 = ROTR(r2 ^ f0, 1n);
+    r3 = ROTL(r3, 1n) ^ f1;
+
     [r0, r1, r2, r3] = [r2, r3, r0, r1];
   }
 
@@ -174,7 +188,9 @@ const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
     const [f0, f1] = F(r0, r1, r, keySchedule);
 
     // Apply the reverse feistel transformation, and rotate the words.
-    [r0, r1, r2, r3] = [r0, r1, ROTL(r2, 1n) ^ f0, ROTR(r3 ^ f1, 1n)];
+    r2 = ROTL(r2, 1n) ^ f0;
+    r3 = ROTR(r3 ^ f1, 1n);
+
     [r0, r1, r2, r3] = [r2, r3, r0, r1];
   }
 
@@ -215,7 +231,10 @@ const extractBytesFromBlob = (blob: bigint, count?: bigint): bigint[] => {
 const littleEndianConversion = (p: bigint[]): bigint[] => {
   const P: bigint[] = [];
   for (let i = 0; i < 4; ++i) {
-    P.push(p[4 * i] | (p[4 * i + 1] << 8n) | (p[4 * i + 2] << 16n) | (p[4 * i + 3] << 24n));
+    P.push(p[4 * i] |
+          (p[4 * i + 1] << 8n) |
+          (p[4 * i + 2] << 16n) |
+          (p[4 * i + 3] << 24n));
   }
 
   return P;
@@ -245,7 +264,7 @@ const inverseLittleEndianConversion = (C: bigint[]): bigint[] => {
 const multiplyGF2_8 = (
   a: bigint,
   b: bigint,
-  irreduciblePolynomial: IrreduciblePolynomial
+  irreduciblePolynomial: IrreduciblePolynomial,
 ): bigint => {
   let product = 0n;
   while (b > 0) {
@@ -350,9 +369,16 @@ const mds = (vector: bigint[]): bigint[] =>
  * @param param3 the key schedule
  * @returns two values, f0 and f1 according to the TwoFish algorithm
  */
-const F = (r0: bigint, r1: bigint, round: number, [K, S]: KeySchedule): [bigint, bigint] => {
+const F = (
+  r0: bigint,
+  r1: bigint,
+  round: number,
+  [K, S]: KeySchedule,
+): [bigint, bigint] => {
+  r1 = ROTL(r1, 8n);
+
   const t0 = H(r0, S);
-  const t1 = H(ROTL(r1, 8n), S);
+  const t1 = H(r1, S);
 
   const f0 = (t0 + t1      + K[2 * round + 8]) & 0xFFn;
   const f1 = (t0 + 2n * t1 + K[2 * round + 9]) & 0xFFn;
@@ -374,12 +400,12 @@ const H = (X: bigint, L: bigint[]): bigint => {
   const l = bytesOfGroup(L, 4);
 
   let y0: bigint, y1: bigint, y2: bigint, y3: bigint;
-  [y0, y1, y2, y3] = [x[0]        ,   x[1]      , x[2]        , x[3]];
-  [y0, y1, y2, y3] = [q0(y0)      , q1(y1)      , q0(y2)      , q1(y3)];
+  [y0, y1, y2, y3] = [x[0]        , x[1]        , x[2]        , x[3]        ];
+  [y0, y1, y2, y3] = [q0(y0)      , q1(y1)      , q0(y2)      , q1(y3)      ];
   [y0, y1, y2, y3] = [y0 ^ l[1][0], y1 ^ l[1][1], y2 ^ l[1][2], y3 ^ l[1][3]];
-  [y0, y1, y2, y3] = [q0(y0)      , q0(y1)      , q1(y2)      , q1(y3)];
+  [y0, y1, y2, y3] = [q0(y0)      , q0(y1)      , q1(y2)      , q1(y3)      ];
   [y0, y1, y2, y3] = [y0 ^ l[0][0], y1 ^ l[0][1], y2 ^ l[0][2], y3 ^ l[0][3]];
-  [y0, y1, y2, y3] = [q1(y0)      , q0(y1)      , q1(y2)      , q0(y3)];
+  [y0, y1, y2, y3] = [q1(y0)      , q0(y1)      , q1(y2)      , q0(y3)      ];
   const [z0, z1, z2, z3] = mds([y0, y1, y2, y3]);
 
   return z0 | (z1 << 8n) | (z2 << 16n) | (z3 << 24n);
@@ -399,11 +425,11 @@ const _qSubstitute = (block: bigint, tables: bigint[][]): bigint => {
   const t3 = (x: bigint): bigint => tables[3][Number(x)];
 
   let a: bigint, b: bigint;
-  [a, b] = [block / 16n, block % 16n];
+  [a, b] = [block / 16n, block % 16n                        ];
   [a, b] = [a ^ b      , (a ^ ROTR4(b, 1n) ^ (8n * a)) % 16n];
-  [a, b] = [t0(a)      , t1(b)];
+  [a, b] = [t0(a)      , t1(b)                              ];
   [a, b] = [a ^ b      , (a ^ ROTR4(b, 1n) ^ (8n * a)) % 16n];
-  [a, b] = [t2(a)      , t3(b)];
+  [a, b] = [t2(a)      , t3(b)                              ];
 
   return 16n * b + a;
 };
@@ -462,7 +488,11 @@ const extractBLOBFrom128BitBytes = (blocks: bigint[]): bigint => {
  * @param shiftAmount the amount to shift the block
  * @returns the block shifted cyclically to the left by the specified amount
  */
-const cyclicallyLeftShift = (block: bigint, blockSize: bigint, shiftAmount: bigint) =>
+const cyclicallyLeftShift = (
+  block: bigint,
+  blockSize: bigint,
+  shiftAmount: bigint,
+) =>
   ((block << shiftAmount) | (block >> (blockSize - shiftAmount))) & ((1n << blockSize) - 1n);
 
 /**
@@ -482,7 +512,11 @@ const ROTL = (block: bigint, shiftAmount: bigint) => cyclicallyLeftShift(block, 
  * @param shiftAmount the amount to shift the block
  * @returns the block shifted cyclically to the right by the specified amount
  */
-const cyclicallyRightShift = (block: bigint, blockSize: bigint, shiftAmount: bigint) =>
+const cyclicallyRightShift = (
+  block: bigint,
+  blockSize: bigint,
+  shiftAmount: bigint,
+) =>
   ((block >> shiftAmount) | ((block & ((1n << shiftAmount) - 1n)) << (blockSize - shiftAmount))) &
   ((1n << blockSize) - 1n);
 
@@ -521,6 +555,12 @@ const groupData = <T>(data: T[], groupSize: number): T[][] => {
   return output;
 }
 
+/**
+ * Extracts bytes from a single BLOB.
+ * @param block the block of data to extract bytes from
+ * @param count the amount of expected bytes
+ * @returns an array of bytes with length [count].
+ */
 const bytesOfSingle = (block: bigint, count: number): bigint[] => {
   const bytes: bigint[] = [];
 
@@ -532,6 +572,12 @@ const bytesOfSingle = (block: bigint, count: number): bigint[] => {
   return bytes;
 }
 
+/**
+ * Extracts bytes from a group of BLOBs.
+ * @param blocks the blocks of data to extract bytes from
+ * @param count the amount of expected bytes from each block
+ * @returns a two-dimensional array of bytes with length [|blocks| x count].
+ */
 const bytesOfGroup = (blocks: bigint[], count: number): bigint[][] => {
   const bytes: bigint[][] = [];
   for (const block of blocks) {

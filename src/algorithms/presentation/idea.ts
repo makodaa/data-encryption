@@ -12,7 +12,7 @@
  * The references used for this implementation are accessible in the documents:
  *   Hoffman, N. (2007). Cryptologia, 31(2), 143–151. doi:10.1080/01611190701215640
  * 
- *   Shehata, K., Hamdy, N., Elagooz, S., & Helmy, M. (2003). DESIGN AND IMPLEMENTATION OF IDEA ALGORITHM KEY SCHEDULE ON FPGA. Retrieved from https://asat.journals.ekb.eg/article_24692.html
+ *   Shehata, K., Hamdy, N., Elagooz, S., & Helmy, M. (2003). DESIGN AND IMPLEMENTATION OF IDEA ALGORITHM KEY SCHEDULE ON FPGA. https://asat.journals.ekb.eg/article_24692.html
  * 
  *   Lai, X., Massey, J.L. (1991). A Proposal for a New Block Encryption Standard. In: Damgård, I.B. (eds) Advances in Cryptology — EUROCRYPT ’90. EUROCRYPT 1990. Lecture Notes in Computer Science, vol 473. Springer, Berlin, Heidelberg. https://doi.org/10.1007/3-540-46877-3_35
  */
@@ -35,7 +35,7 @@ export const encrypt: EncryptDecrypt = async (messageHex, key, _) => {
 
   /// Encryption of the blocks
   const blocks = extract64BitBlocksFromBLOB(messageHex);
-  const outputs = blocks.map((b) => encryptBlock(b, keySchedule));
+  const outputs = blocks.map((b) => processBlock(b, keySchedule));
   const encryptedText = extractBLOBFrom64BitBlocks(outputs);
 
   return encryptedText;
@@ -54,7 +54,7 @@ export const decrypt: EncryptDecrypt = async (messageHex, key, _) => {
 
   /// Decryption of the blocks
   const blocks = extract64BitBlocksFromBLOB(messageHex);
-  const outputs = blocks.map((b) => decryptBlock(b, keySchedule));
+  const outputs = blocks.map((b) => processBlock(b, keySchedule));
   const decryptedText = extractBLOBFrom64BitBlocks(outputs);
 
   return decryptedText;
@@ -208,7 +208,7 @@ type EncryptDecryptBlock = (block: bigint, keySchedule: bigint[][]) => //
  * @param keySchedule The key schedule generated.
  * @returns The encrypted block of data.
  */
-const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
+const processBlock: EncryptDecryptBlock = (block, keySchedule) => {
   let [x1, x2, x3, x4] = extractBitsIntoBlocks(block, 16n, 4n);
 
   for (let i = 0; i < 8; ++i) {
@@ -249,62 +249,8 @@ const encryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
   // Round 8.5.
   const [z1, z2, z3, z4] = keySchedule[8];
   const y1 = multiply(x1, z1);
-  const y2 = add(x2, z2);
-  const y3 = add(x3, z3);
-  const y4 = multiply(x4, z4);
-
-  return (y1 << 48n) | (y2 << 32n) | (y3 << 16n) | y4;
-};
-
-/**
- * Encrypts a block of data using the IDEA algorithm.
- * @param block A block of 64-bit data.
- * @param keySchedule The key schedule generated.
- * @returns The encrypted block of data.
- */
-const decryptBlock: EncryptDecryptBlock = (block, keySchedule) => {
-  let [x1, x2, x3, x4] = extractBitsIntoBlocks(block, 16n, 4n);
-
-  for (let i = 0; i < 8; ++i) {
-    const [z1, z2, z3, z4, z5, z6] = keySchedule[i];
-
-    //  1. Multiply X1 and the first subkey Z1.
-    const y1 = multiply(x1, z1);
-    //  2. Add X2 and the second subkey Z2.
-    const y2 = add(x2, z2);
-    //  3. Add X3 and the third subkey Z3.
-    const y3 = add(x3, z3);
-    //  4. Multiply X4 and the fourth subkey Z4.
-    const y4 = multiply(x4, z4);
-    //  5. Bitwise XOR the results of steps 1 and 3.
-    const y5 = y1 ^ y3;
-    //  6. Bitwise XOR the results of steps 2 and 4.
-    const y6 = y2 ^ y4;
-    //  7. Multiply the result of step 5 and the fifth subkey Z5.
-    const y7 = multiply(y5, z5);
-    //  8. Add the results of steps 6 and 7.
-    const y8 = add(y6, y7);
-    //  9. Multiply the result of step 8 and the sixth subkey Z6.
-    const y9 = multiply(y8, z6);
-    //  10. Add the results of steps 7 and 9.
-    const y10 = add(y7, y9);
-    //  11. Bitwise XOR the results of steps 1 and 9.
-    const y11 = y1 ^ y9;
-    //  12. Bitwise XOR the results of steps 3 and 9.
-    const y12 = y3 ^ y9;
-    //  13. Bitwise XOR the results of steps 2 and 10.
-    const y13 = y2 ^ y10;
-    //  14. Bitwise XOR the results of steps 4 and 10
-    const y14 = y4 ^ y10;
-
-    [x1, x2, x3, x4] = [y11, y13, y12, y14];
-  }
-
-  // Round 8.5.
-  const [z1, z2, z3, z4] = keySchedule[8];
-  const y1 = multiply(x1, z1);
-  const y2 = add(x2, z2);
-  const y3 = add(x3, z3);
+  const y2 = add(x3, z2);
+  const y3 = add(x2, z3);
   const y4 = multiply(x4, z4);
 
   return (y1 << 48n) | (y2 << 32n) | (y3 << 16n) | y4;
@@ -327,6 +273,11 @@ const extractBitsIntoBlocks = (block: bigint, blockSize: bigint, blockCount?: bi
   return blocks;
 };
 
+/**
+ * Extracts the 64-bit blocks from a hex value.
+ * @param hex the hex value to extract the 64-bit blocks from.
+ * @returns the 64-bit blocks extracted from the hex value.
+ */
 const extract64BitBlocksFromBLOB = (hex: bigint): bigint[] => {
   const blocks: bigint[] = [];
   while (hex > 0) {
@@ -337,6 +288,11 @@ const extract64BitBlocksFromBLOB = (hex: bigint): bigint[] => {
   return blocks;
 };
 
+/**
+ * Creates a Binary Large Object (BLOB) from the 64-bit blocks.
+ * @param blocks the blocks to create the BLOB from.
+ * @returns the BLOB
+ */
 const extractBLOBFrom64BitBlocks = (blocks: bigint[]): bigint => {
   let hex = 0n;
 
@@ -346,29 +302,4 @@ const extractBLOBFrom64BitBlocks = (blocks: bigint[]): bigint => {
   }
 
   return hex;
-};
-
-/**
- * Based off the code at this post from user <b>sfussenegger</b>:
- *  https://stackoverflow.com/questions/1660501/what-is-a-good-64bit-hash-function-in-java-for-textual-strings
- * @param string input string
- * @returns a hash of the input string.
- */
-const hash = (string: string): bigint => {
-  let h = 1125899906842597n; // prime
-  const len = string.length;
-
-  for (let i = 0; i < len; i++) {
-    h = 31n * h + BigInt(string.charCodeAt(i));
-  }
-
-  return h;
-};
-
-/**
- * Generates a random 128-bit key.
- * @returns a random 128-bit key.
- */
-const random128BitKey = (): string => {
-  return Math.floor((Math.random() + (10 ** 16)) * 10).toString();
 };
