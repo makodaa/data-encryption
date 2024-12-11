@@ -133,7 +133,7 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
     0x61707865n, 0x3320646en, 0x79622d32n, 0x6b206574n,
     keyWords[0], keyWords[1], keyWords[2], keyWords[3],
     keyWords[4], keyWords[5], keyWords[6], keyWords[7],
-    count, nonceWords[0], nonceWords[1], nonceWords[2],
+    count + 1n, nonceWords[0], nonceWords[1], nonceWords[2],
   ] as ChaCha20State;
   const stateCopy = [...state] as ChaCha20State;
   partialOutputs.push([
@@ -166,7 +166,7 @@ const chaChaBlock = (key: bigint, nonce: bigint, count: bigint):
   const output = addState(state, stateCopy);
     partialOutputs.push([
       `Added State`,
-      stringifyState(stateCopy),
+      stringifyState(output),
     ]);
 
   partialOutputs.push([
